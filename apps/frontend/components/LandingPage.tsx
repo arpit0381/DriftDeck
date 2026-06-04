@@ -1,19 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
-  Folder,
-  FileText,
-  Sparkles,
-  Settings as SettingsIcon,
-  ArrowUpRight,
-  Lock,
-  Palette,
-  Terminal,
-  FileImage,
-  FolderOpen,
-  RefreshCw,
+  Folder, FileText, Sparkles, Settings as SettingsIcon,
+  ArrowUpRight, Lock, Palette, Terminal, FileImage,
+  FolderOpen, RefreshCw, CheckCircle, Clock,
 } from "lucide-react";
 import { ThemeType } from "../lib/store";
 
@@ -43,61 +35,127 @@ const THEMES: { value: ThemeType; label: string }[] = [
   { value: "solar-gold", label: "Solar Gold" },
 ];
 
-// Telegram bot username extracted from token (format: botId:hash)
-const BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "DriftDeckBot";
+// ─── Telegram Login via Bot (/start deeplink + polling) ──────────────────────
+// Works on localhost AND production — no domain restriction.
+// Flow: User clicks → opens Telegram bot → sends /start <sessionId>
+//       → backend creates account & stores JWT → frontend polls & auto-logs in
 
-declare global {
-  interface Window {
-    TelegramLoginCallback?: (user: TelegramAuthData) => void;
-  }
-}
+function TelegramBotLogin({ onLogin }: { onLogin: (jwt: string) => void }) {
+  const [sessionId] = useState(() => Math.random().toString(36).substring(2, 12));
+  const [step, setStep] = useState<"idle" | "waiting" | "success">("idle");
+  const [pollInterval, setPollInterval] = useState<ReturnType<typeof setInterval> | null>(null);
 
-function TelegramLoginWidget({ onLogin }: { onLogin: (data: TelegramAuthData) => void }) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api").replace("/api", "");
+  const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "driftdeck_bot";
+  const deepLink = `https://t.me/${botUsername}?start=${sessionId}`;
+  const pollUrl = `${apiUrl}/api/auth/poll/${sessionId}`;
 
+  const startPolling = () => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(pollUrl);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.token) {
+            clearInterval(interval);
+            setStep("success");
+            onLogin(data.token);
+          }
+        }
+      } catch {
+        // Keep polling silently
+      }
+    }, 2000);
+    setPollInterval(interval);
+    return interval;
+  };
+
+  const handleClick = () => {
+    setStep("waiting");
+    startPolling();
+    window.open(deepLink, "_blank");
+  };
+
+  // Cleanup on unmount
   useEffect(() => {
-    if (!containerRef.current) return;
+    return () => { if (pollInterval) clearInterval(pollInterval); };
+  }, [pollInterval]);
 
-    // Register global callback that Telegram widget calls
-    window.TelegramLoginCallback = onLogin;
+  if (step === "success") {
+    return (
+      <div className="w-full py-3.5 rounded-xl flex items-center justify-center gap-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold text-sm">
+        <CheckCircle className="w-5 h-5" />
+        Authenticated! Loading dashboard...
+      </div>
+    );
+  }
 
-    // Remove any old script
-    const oldScript = document.getElementById("telegram-login-script");
-    if (oldScript) oldScript.remove();
-
-    // Inject Telegram Login Widget script
-    const script = document.createElement("script");
-    script.id = "telegram-login-script";
-    script.src = "https://telegram.org/js/telegram-widget.js?22";
-    script.setAttribute("data-telegram-login", BOT_USERNAME);
-    script.setAttribute("data-size", "large");
-    script.setAttribute("data-onauth", "TelegramLoginCallback(user)");
-    script.setAttribute("data-request-access", "write");
-    script.async = true;
-
-    containerRef.current.appendChild(script);
-
-    return () => {
-      delete window.TelegramLoginCallback;
-      script.remove();
-    };
-  }, [onLogin]);
+  if (step === "waiting") {
+    return (
+      <div className="w-full flex flex-col gap-3">
+        <div className="w-full py-3.5 rounded-xl flex items-center justify-center gap-3 bg-blue-500/10 border border-blue-500/30 text-blue-300 font-bold text-sm">
+          <Clock className="w-4 h-4 animate-pulse" />
+          Waiting for Telegram confirmation...
+        </div>
+        <p className="text-[10px] text-slate-500 text-center font-mono leading-relaxed">
+          The Telegram bot should have opened.<br />
+          Send <span className="text-slate-400 font-bold">/start</span> to complete login.
+        </p>
+        <button
+          onClick={() => window.open(deepLink, "_blank")}
+          className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors text-center"
+        >
+          Didn't open? Click here to open bot again →
+        </button>
+        <button
+          onClick={() => { if (pollInterval) clearInterval(pollInterval); setStep("idle"); }}
+          className="text-[10px] text-slate-600 hover:text-slate-400 transition-colors text-center"
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div ref={containerRef} className="flex justify-center min-h-[52px] items-center" />
+    <button
+      onClick={handleClick}
+      className="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-3 transition-all active:scale-95 hover:scale-[1.01]"
+      style={{
+        background: "linear-gradient(135deg, #2ca5e0 0%, #1a8cc4 100%)",
+        color: "#fff",
+        boxShadow: "0 4px 20px rgba(44, 165, 224, 0.3)",
+      }}
+    >
+      {/* Telegram icon */}
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+        <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z"/>
+      </svg>
+      Sign in with Telegram
+    </button>
   );
 }
 
 export default function LandingPage({
-  theme,
-  setTheme,
-  onDemoLogin,
-  onTelegramLogin,
-  loading,
+  theme, setTheme, onDemoLogin, onTelegramLogin, loading,
 }: LandingPageProps) {
+
+  const handleBotLogin = async (jwt: string) => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
+      const res = await fetch(`${apiUrl}/auth/me`, {
+        headers: { Authorization: `Bearer ${jwt}` },
+      });
+      if (!res.ok) throw new Error("Token validation failed");
+      const { user, settings } = await res.json();
+      onTelegramLogin({ ...user, _jwt: jwt } as any);
+    } catch {
+      alert("Login failed — please try again.");
+    }
+  };
+
   return (
     <div className="relative min-h-screen text-slate-100 overflow-hidden font-sans bg-[#06060c]">
-      {/* Glowing blobs */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-500/10 blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-pink-500/10 blur-[120px] pointer-events-none" />
 
@@ -110,9 +168,7 @@ export default function LandingPage({
           className="bg-transparent text-sm font-semibold outline-none border-none pr-3 cursor-pointer text-slate-200"
         >
           {THEMES.map((t) => (
-            <option key={t.value} value={t.value} className="bg-slate-950 text-slate-200">
-              {t.label}
-            </option>
+            <option key={t.value} value={t.value} className="bg-slate-950 text-slate-200">{t.label}</option>
           ))}
         </select>
       </div>
@@ -135,12 +191,11 @@ export default function LandingPage({
         <button
           onClick={onDemoLogin}
           disabled={loading}
-          className="relative px-6 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-indigo-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white transition-all shadow-lg shadow-indigo-500/25 active:scale-95 group overflow-hidden disabled:opacity-60"
+          className="relative px-6 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-indigo-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white transition-all shadow-lg shadow-indigo-500/25 active:scale-95 disabled:opacity-60"
         >
-          <span className="relative z-10 flex items-center gap-2">
+          <span className="flex items-center gap-2">
             {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
-            {loading ? "Loading..." : "Try Demo"}
-            {!loading && <ArrowUpRight className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />}
+            {loading ? "Loading..." : <>Try Demo <ArrowUpRight className="w-4 h-4" /></>}
           </span>
         </button>
       </header>
@@ -149,7 +204,7 @@ export default function LandingPage({
       <section className="max-w-7xl mx-auto px-6 pt-16 pb-24 relative z-10 flex flex-col items-center text-center">
         <motion.div
           initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 mb-8 shadow-sm"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 mb-8"
         >
           <Sparkles className="w-4 h-4 text-indigo-400 animate-pulse" />
           <span className="text-xs font-semibold text-indigo-300 tracking-wider uppercase font-mono">
@@ -171,21 +226,20 @@ export default function LandingPage({
           initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.2 }}
           className="text-lg md:text-xl text-slate-400 max-w-2xl leading-relaxed mb-10"
         >
-          Store files seamlessly using Telegram as a zero-cost backend layer, encrypted
-          end-to-end client-side. Integrated with Notion-style docs and floating AI models.
+          Store files using Telegram as a zero-cost backend. Encrypted end-to-end client-side.
+          Integrated with Notion-style docs and floating AI models.
         </motion.p>
 
-        {/* CTA block */}
+        {/* Login CTA */}
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.3 }}
-          className="flex flex-col items-center gap-5 w-full max-w-sm mb-20"
+          className="flex flex-col items-center gap-4 w-full max-w-sm mb-20"
         >
-          {/* Telegram Login Widget */}
           <div className="w-full">
-            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 font-mono text-center">
-              Sign in with your Telegram account
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-3 font-mono text-center">
+              Login via Telegram Bot
             </p>
-            <TelegramLoginWidget onLogin={onTelegramLogin} />
+            <TelegramBotLogin onLogin={handleBotLogin} />
           </div>
 
           <div className="flex items-center gap-3 w-full">
@@ -197,10 +251,10 @@ export default function LandingPage({
           <button
             onClick={onDemoLogin}
             disabled={loading}
-            className="w-full py-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 font-bold rounded-xl transition-all text-slate-300 flex items-center justify-center gap-2 text-sm disabled:opacity-60"
+            className="w-full py-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-indigo-500/30 font-bold rounded-xl transition-all text-slate-300 flex items-center justify-center gap-2 text-sm disabled:opacity-60"
           >
             {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-indigo-400" />}
-            {loading ? "Launching..." : "Try Interactive Demo"}
+            {loading ? "Launching..." : "Try Interactive Demo (instant, no login)"}
           </button>
         </motion.div>
 
@@ -210,7 +264,7 @@ export default function LandingPage({
           className="w-full max-w-5xl rounded-2xl border border-slate-800 bg-slate-950/80 p-3 shadow-2xl relative"
         >
           <div className="absolute -inset-1 rounded-2xl bg-gradient-to-tr from-indigo-500/20 via-transparent to-pink-500/20 blur-xl pointer-events-none" />
-          <div className="w-full h-[440px] rounded-xl border border-slate-800/80 bg-slate-950 overflow-hidden relative flex flex-col shadow-inner">
+          <div className="w-full h-[440px] rounded-xl border border-slate-800/80 bg-slate-950 overflow-hidden flex flex-col shadow-inner">
             <div className="h-10 bg-slate-900/90 border-b border-slate-800/80 px-4 flex items-center justify-between">
               <div className="flex gap-2">
                 <div className="w-3 h-3 rounded-full bg-red-500/80" />
@@ -228,7 +282,7 @@ export default function LandingPage({
                   { icon: <Sparkles className="w-4 h-4 text-slate-500" />, label: "AI Engine", active: false },
                   { icon: <SettingsIcon className="w-4 h-4 text-slate-500" />, label: "Settings", active: false },
                 ].map((item) => (
-                  <div key={item.label} className={`h-8 rounded-lg flex items-center px-3 gap-2 ${item.active ? "bg-indigo-500/20" : "hover:bg-slate-800/30"}`}>
+                  <div key={item.label} className={`h-8 rounded-lg flex items-center px-3 gap-2 ${item.active ? "bg-indigo-500/20" : ""}`}>
                     {item.icon}
                     <span className={`text-xs font-semibold ${item.active ? "text-indigo-200" : "text-slate-400"}`}>{item.label}</span>
                   </div>
@@ -239,10 +293,10 @@ export default function LandingPage({
                   {[
                     { label: "TOTAL FILES", value: "12,504", color: "text-slate-200" },
                     { label: "ENCRYPTED", value: "100%", color: "text-pink-500" },
-                    { label: "STORAGE COST", value: "$0.00", color: "text-emerald-500" },
+                    { label: "COST", value: "$0.00", color: "text-emerald-500" },
                   ].map((c) => (
                     <div key={c.label} className="h-24 glass-panel rounded-xl p-4 border-slate-800/60 flex flex-col justify-between">
-                      <div className="text-xs text-slate-500 font-semibold font-mono">{c.label}</div>
+                      <div className="text-[10px] text-slate-500 font-semibold font-mono">{c.label}</div>
                       <div className={`text-2xl font-black ${c.color}`}>{c.value}</div>
                     </div>
                   ))}
@@ -273,29 +327,12 @@ export default function LandingPage({
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {[
-            {
-              icon: <Lock className="w-6 h-6" />,
-              cls: "bg-indigo-500/10 border-indigo-500/30 text-indigo-400",
-              title: "Zero-Knowledge Cryptography",
-              desc: "AES-256 client-side encryption before upload. Your keys never leave your browser.",
-            },
-            {
-              icon: <Sparkles className="w-6 h-6" />,
-              cls: "bg-pink-500/10 border-pink-500/30 text-pink-400",
-              title: "Neural Semantic Search",
-              desc: "Summarize PDFs, query large datasets, retrieve files using AI within floating chat portals.",
-            },
-            {
-              icon: <FolderOpen className="w-6 h-6" />,
-              cls: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400",
-              title: "Virtual Folder System",
-              desc: "Telegram stores files flat. Drift Deck builds nested virtual directories via Supabase.",
-            },
+            { icon: <Lock className="w-6 h-6" />, cls: "bg-indigo-500/10 border-indigo-500/30 text-indigo-400", title: "Zero-Knowledge Cryptography", desc: "AES-256 client-side encryption before upload. Your keys never leave your browser." },
+            { icon: <Sparkles className="w-6 h-6" />, cls: "bg-pink-500/10 border-pink-500/30 text-pink-400", title: "Neural Semantic Search", desc: "Summarize PDFs, query large datasets, retrieve files using AI within floating chat portals." },
+            { icon: <FolderOpen className="w-6 h-6" />, cls: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400", title: "Virtual Folder System", desc: "Telegram stores files flat. Drift Deck builds nested virtual directories via Supabase." },
           ].map((f) => (
             <div key={f.title} className="glass-panel p-8 rounded-2xl border-slate-800/80 hover:border-indigo-500/30 transition-all group">
-              <div className={`w-12 h-12 rounded-xl border flex items-center justify-center mb-6 group-hover:scale-110 transition-transform ${f.cls}`}>
-                {f.icon}
-              </div>
+              <div className={`w-12 h-12 rounded-xl border flex items-center justify-center mb-6 group-hover:scale-110 transition-transform ${f.cls}`}>{f.icon}</div>
               <h3 className="text-xl font-bold mb-3 text-slate-100">{f.title}</h3>
               <p className="text-slate-400 text-sm leading-relaxed">{f.desc}</p>
             </div>
