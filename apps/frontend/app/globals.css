@@ -1,0 +1,130 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Outfit:wght@300;400;600;700;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: 'Outfit', sans-serif;
+  --font-mono: 'Orbitron', monospace;
+}
+
+/* 1. NEON CYBERPUNK (Default) */
+.theme-neon-cyberpunk {
+  --background: #06060c;
+  --foreground: #e2e8f0;
+  --card: rgba(13, 13, 27, 0.7);
+  --card-foreground: #f1f5f9;
+  --border: rgba(99, 102, 241, 0.3);
+  --primary: #6366f1; /* Indigo */
+  --primary-hover: #4f46e5;
+  --accent: #d946ef; /* Neon Pink */
+  --muted: #64748b;
+  --primary-glow: rgba(99, 102, 241, 0.5);
+}
+
+/* 2. MIDNIGHT GLASS */
+.theme-midnight-glass {
+  --background: #020617;
+  --foreground: #f8fafc;
+  --card: rgba(15, 23, 42, 0.4);
+  --card-foreground: #f1f5f9;
+  --border: rgba(148, 163, 184, 0.15);
+  --primary: #38bdf8; /* Light Sky Blue */
+  --primary-hover: #0ea5e9;
+  --accent: #818cf8;
+  --muted: #475569;
+  --primary-glow: rgba(56, 189, 248, 0.3);
+}
+
+/* 3. CRIMSON VOID */
+.theme-crimson-void {
+  --background: #070202;
+  --foreground: #f3f4f6;
+  --card: rgba(23, 10, 10, 0.75);
+  --card-foreground: #f9fafb;
+  --border: rgba(239, 68, 68, 0.25);
+  --primary: #ef4444; /* Neon Red */
+  --primary-hover: #dc2626;
+  --accent: #f97316; /* Orange */
+  --muted: #4b5563;
+  --primary-glow: rgba(239, 68, 68, 0.5);
+}
+
+/* 4. AURORA GREEN */
+.theme-aurora-green {
+  --background: #020804;
+  --foreground: #ecfdf5;
+  --card: rgba(6, 25, 14, 0.7);
+  --card-foreground: #f0fdf4;
+  --border: rgba(16, 185, 129, 0.3);
+  --primary: #10b981; /* Emerald Green */
+  --primary-hover: #059669;
+  --accent: #34d399;
+  --muted: #3f6244;
+  --primary-glow: rgba(16, 185, 129, 0.5);
+}
+
+/* 5. SOLAR GOLD */
+.theme-solar-gold {
+  --background: #0b0a09;
+  --foreground: #fafaf9;
+  --card: rgba(28, 25, 23, 0.7);
+  --card-foreground: #f5f5f4;
+  --border: rgba(217, 119, 6, 0.25);
+  --primary: #f59e0b; /* Amber Gold */
+  --primary-hover: #d97706;
+  --accent: #fbbf24;
+  --muted: #57534e;
+  --primary-glow: rgba(245, 158, 11, 0.4);
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--background);
+  color: var(--foreground);
+  overflow-x: hidden;
+  transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+/* Glassmorphism utility */
+.glass-panel {
+  background: var(--card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/* Custom glow utility */
+.glow-text {
+  text-shadow: 0 0 10px var(--primary-glow);
+}
+
+.glow-border {
+  box-shadow: 0 0 8px var(--primary-glow);
+}
+
+/* Matrix glow effect */
+.matrix-glow {
+  text-shadow: 0 0 5px rgba(16, 185, 129, 0.8);
+}
