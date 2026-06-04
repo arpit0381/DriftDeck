@@ -1,14 +1,15 @@
-import type { GetStaticProps } from 'next';
+import type { GetServerSideProps } from 'next';
 import dynamic from 'next/dynamic';
 
-// Entire app loads client-side only — no SSR
 const App = dynamic(() => import('../components/App'), { ssr: false });
 
 export default function Home() {
   return <App />;
 }
 
-// Tell Next.js this is a fully static page (no server-side data needed)
-export const getStaticProps: GetStaticProps = async () => {
+// Using getServerSideProps instead of getStaticProps prevents Next.js
+// from prerendering this page at build time (which causes dual-React issues).
+// The page renders entirely on the client anyway (ssr: false).
+export const getServerSideProps: GetServerSideProps = async () => {
   return { props: {} };
 };
