@@ -7,22 +7,20 @@ import confetti from "canvas-confetti";
 import { useAppStore } from "../lib/store";
 import * as api from "../lib/api";
 import { FileMetadata, Folder, Note } from "@drift-deck/types";
-import { encryptText } from "@drift-deck/utils";
 
-import LandingPage from "../components/LandingPage";
-import DashboardHeader from "../components/DashboardHeader";
-import Sidebar from "../components/Sidebar";
-import DashboardHome from "../components/DashboardHome";
-import FilesExplorer from "../components/FilesExplorer";
-import NotesEditor from "../components/NotesEditor";
-import AIAssistant from "../components/AIAssistant";
-import FavoritesView from "../components/FavoritesView";
-import TrashView from "../components/TrashView";
-import SettingsPanel from "../components/SettingsPanel";
+import LandingPage, { TelegramAuthData } from "./LandingPage";
+import DashboardHeader from "./DashboardHeader";
+import Sidebar from "./Sidebar";
+import DashboardHome from "./DashboardHome";
+import FilesExplorer from "./FilesExplorer";
+import NotesEditor from "./NotesEditor";
+import AIAssistant from "./AIAssistant";
+import FavoritesView from "./FavoritesView";
+import TrashView from "./TrashView";
+import SettingsPanel from "./SettingsPanel";
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// ─── Normalise backend snake_case → camelCase ────────────────────────────────
 
-/** Normalise backend snake_case file fields to camelCase types */
 function normaliseFile(raw: any): FileMetadata {
   return {
     id: raw.id,
@@ -69,9 +67,9 @@ function normaliseNote(raw: any): Note {
   };
 }
 
-// ─── DEMO mock data (used when not connected to a real backend) ──────────────
+// ─── Demo seed data ──────────────────────────────────────────────────────────
 
-function loadDemoData(): { files: FileMetadata[]; folders: Folder[]; notes: Note[] } {
+function loadDemoData() {
   const files: FileMetadata[] = [
     {
       id: "f1", userId: "usr1", name: "quantum_ledger.pdf", folderId: null,
@@ -100,6 +98,15 @@ function loadDemoData(): { files: FileMetadata[]; folders: Folder[]; notes: Note
       createdAt: new Date(Date.now() - 1000000).toISOString(),
       updatedAt: new Date().toISOString(),
     },
+    {
+      id: "f4", userId: "usr1", name: "deleted_secrets.txt", folderId: null,
+      telegramMessageId: 104, telegramChannelId: 202,
+      size: 1024 * 5, mimeType: "text/plain",
+      isEncrypted: false, isFavorite: false, isInTrash: true,
+      encryptionSalt: null, trashedAt: new Date().toISOString(),
+      createdAt: new Date(Date.now() - 86400000).toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
   ];
 
   const folders: Folder[] = [
@@ -111,6 +118,11 @@ function loadDemoData(): { files: FileMetadata[]; folders: Folder[]; notes: Note
     {
       id: "fol2", userId: "usr1", name: "Encrypted Logs", parentFolderId: null,
       color: "#f59e0b", isFavorite: false,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    },
+    {
+      id: "fol3", userId: "usr1", name: "Sub Assets", parentFolderId: "fol1",
+      color: "#8b5cf6", isFavorite: false,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     },
   ];
@@ -126,8 +138,15 @@ function loadDemoData(): { files: FileMetadata[]; folders: Folder[]; notes: Note
     {
       id: "n2", userId: "usr1",
       title: "💡 Cyberpunk Color Tokens",
-      content: "# CSS variables design guidelines\n\nIndigo: #6366f1\nNeon Pink: #d946ef\nCyber Red: #ef4444",
+      content: "# CSS variables design guidelines\n\nIndigo: #6366f1\nNeon Pink: #d946ef\nCyber Red: #ef4444\nEmerald: #10b981",
       isFavorite: true, telegramMessageId: null,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    },
+    {
+      id: "n3", userId: "usr1",
+      title: "📋 API Notes",
+      content: "## Backend Endpoints\n\nAll routes are prefixed with `/api`.\n\n- POST `/auth/login` — Telegram login\n- GET `/files` — list files\n- POST `/files/upload` — upload a file",
+      isFavorite: false, telegramMessageId: null,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     },
   ];
@@ -135,16 +154,16 @@ function loadDemoData(): { files: FileMetadata[]; folders: Folder[]; notes: Note
   return { files, folders, notes };
 }
 
-// ─── Root page ───────────────────────────────────────────────────────────────
+// ─── Main App component ───────────────────────────────────────────────────────
 
-export default function Home() {
+export default function App() {
   const {
     theme, setTheme,
     token, user, settings,
     setAuth, logout,
     activeTab, setActiveTab,
     currentFolderId, setCurrentFolderId,
-    folderPath, pushFolderPath, popFolderPath,
+    folderPath, pushFolderPath, setFolderPath,
     files, setFiles,
     folders, setFolders,
     uploadQueue, addToUploadQueue, updateUploadProgress, setUploadStatus,
@@ -156,27 +175,40 @@ export default function Home() {
   const [stats, setStats] = useState<api.FileStats | null>(null);
   const isDemo = token === "demo_jwt_token_driftdeck_2026";
 
-  // AI chat state lives here so it persists across tab switches
+  // AI chat state
   const [aiChat, setAiChat] = useState<{ sender: "user" | "ai"; text: string }[]>([
     { sender: "ai", text: "Drift Deck Semantic Engine ready. Upload a file or paste a prompt to get started." },
   ]);
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
 
-  // ─── Bootstrap on auth ────────────────────────────────────────────────────
+  // ─── Hydrate from localStorage ───────────────────────────────────────────
+
+  useEffect(() => {
+    const savedToken = localStorage.getItem("drift-deck-token");
+    const savedTheme = localStorage.getItem("drift-deck-theme") as typeof theme | null;
+    if (savedTheme) setTheme(savedTheme);
+
+    if (savedToken && !token) {
+      api.getMe(savedToken)
+        .then(({ user: u, settings: s }) => setAuth(savedToken, u, s))
+        .catch(() => localStorage.removeItem("drift-deck-token"));
+    }
+  }, []);
+
+  // ─── Load data when authenticated ────────────────────────────────────────
 
   useEffect(() => {
     if (!token) return;
 
     if (isDemo) {
-      const { files: demoFiles, folders: demoFolders, notes: demoNotes } = loadDemoData();
-      if (files.length === 0) setFiles(demoFiles);
-      if (folders.length === 0) setFolders(demoFolders);
-      if (notes.length === 0) setNotes(demoNotes);
+      const demo = loadDemoData();
+      if (files.length === 0) setFiles(demo.files);
+      if (folders.length === 0) setFolders(demo.folders);
+      if (notes.length === 0) setNotes(demo.notes);
       return;
     }
 
-    // Real API: load all data in parallel
     Promise.all([
       api.listFiles(token, { inTrash: false }).catch(() => [] as any[]),
       api.listFolders(token).catch(() => [] as any[]),
@@ -190,10 +222,27 @@ export default function Home() {
     });
   }, [token]);
 
-  // ─── Auth ────────────────────────────────────────────────────────────────
+  // ─── Telegram real login ─────────────────────────────────────────────────
 
-  const handleDemoLogin = () => {
+  const handleTelegramLogin = useCallback(async (data: TelegramAuthData) => {
     setLoading(true);
+    try {
+      const { token: jwt, user: u } = await api.loginWithTelegram(data as any);
+      // Fetch settings after login
+      const { settings: s } = await api.getMe(jwt);
+      setAuth(jwt, u, s);
+      confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+    } catch (err: any) {
+      console.error("Telegram login failed:", err.message);
+      alert("Login failed: " + (err.message || "Unknown error"));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // ─── Demo login ──────────────────────────────────────────────────────────
+
+  const handleDemoLogin = useCallback(() => {    setLoading(true);
     setTimeout(() => {
       setAuth(
         "demo_jwt_token_driftdeck_2026",
@@ -220,9 +269,9 @@ export default function Home() {
       setLoading(false);
       confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
     }, 700);
-  };
+  }, [theme]);
 
-  // ─── File operations ──────────────────────────────────────────────────────
+  // ─── File operations ─────────────────────────────────────────────────────
 
   const handleUpload = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -236,7 +285,6 @@ export default function Home() {
         addToUploadQueue({ id: uploadId, name: file.name, size: file.size, progress: 0, status: "uploading" });
 
         if (isDemo) {
-          // Simulate upload for demo mode
           let progress = 0;
           const tick = setInterval(() => {
             progress = Math.min(100, progress + Math.floor(Math.random() * 20) + 8);
@@ -266,7 +314,6 @@ export default function Home() {
             }
           }, 280);
         } else if (token) {
-          // Real upload
           api.uploadFile(token, file, currentFolderId, masterKey !== null)
             .then((raw) => {
               setUploadStatus(uploadId, "completed");
@@ -277,7 +324,6 @@ export default function Home() {
             .catch(() => setUploadStatus(uploadId, "failed"));
         }
       }
-      // Reset input so the same file can be re-selected
       e.target.value = "";
     },
     [token, isDemo, files, currentFolderId, masterKey, user]
@@ -285,44 +331,25 @@ export default function Home() {
 
   const handleDeleteFile = useCallback(
     (id: string) => {
-      if (isDemo) {
-        setFiles(files.map((f) => f.id === id ? { ...f, isInTrash: true } : f));
-        return;
-      }
-      if (!token) return;
-      api.deleteFile(token, id).then(() =>
-        setFiles(files.map((f) => f.id === id ? { ...f, isInTrash: true } : f))
-      );
+      setFiles(files.map((f) => f.id === id ? { ...f, isInTrash: true, trashedAt: new Date().toISOString() } : f));
+      if (!isDemo && token) api.deleteFile(token, id).catch(() => {});
     },
     [token, isDemo, files]
   );
 
   const handleRestoreFile = useCallback(
     (id: string) => {
-      if (isDemo) {
-        setFiles(files.map((f) => f.id === id ? { ...f, isInTrash: false } : f));
-        confetti({ particleCount: 30, spread: 40 });
-        return;
-      }
-      if (!token) return;
-      api.restoreFile(token, id).then(() => {
-        setFiles(files.map((f) => f.id === id ? { ...f, isInTrash: false } : f));
-        confetti({ particleCount: 30, spread: 40 });
-      });
+      setFiles(files.map((f) => f.id === id ? { ...f, isInTrash: false, trashedAt: null } : f));
+      confetti({ particleCount: 30, spread: 40 });
+      if (!isDemo && token) api.restoreFile(token, id).catch(() => {});
     },
     [token, isDemo, files]
   );
 
   const handleToggleFavorite = useCallback(
     (id: string, current: boolean) => {
-      if (isDemo) {
-        setFiles(files.map((f) => f.id === id ? { ...f, isFavorite: !current } : f));
-        return;
-      }
-      if (!token) return;
-      api.toggleFileFavorite(token, id, !current).then((raw) =>
-        setFiles(files.map((f) => f.id === id ? normaliseFile(raw) : f))
-      );
+      setFiles(files.map((f) => f.id === id ? { ...f, isFavorite: !current } : f));
+      if (!isDemo && token) api.toggleFileFavorite(token, id, !current).catch(() => {});
     },
     [token, isDemo, files]
   );
@@ -334,15 +361,12 @@ export default function Home() {
         return;
       }
       if (!token) return;
-      const url = `${api.getFileDownloadUrl(id)}`;
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = name;
-      // Pass auth token via fetch for authenticated download
-      fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      fetch(api.getFileDownloadUrl(id), { headers: { Authorization: `Bearer ${token}` } })
         .then((res) => res.blob())
         .then((blob) => {
+          const a = document.createElement("a");
           a.href = URL.createObjectURL(blob);
+          a.download = name;
           a.click();
           URL.revokeObjectURL(a.href);
         });
@@ -350,7 +374,7 @@ export default function Home() {
     [token, isDemo]
   );
 
-  // ─── Folder operations ────────────────────────────────────────────────────
+  // ─── Folder operations ───────────────────────────────────────────────────
 
   const handleCreateFolder = useCallback(
     (name: string, color: string) => {
@@ -369,17 +393,17 @@ export default function Home() {
         return;
       }
       if (!token) return;
-      api.createFolder(token, name, currentFolderId, color).then((raw) =>
-        setFolders([...folders, normaliseFolder(raw)])
-      );
+      api.createFolder(token, name, currentFolderId, color)
+        .then((raw) => setFolders([...folders, normaliseFolder(raw)]))
+        .catch(() => {});
     },
     [token, isDemo, folders, currentFolderId, user]
   );
 
-  // ─── Notes operations ─────────────────────────────────────────────────────
+  // ─── Notes operations ────────────────────────────────────────────────────
 
   const handleCreateNote = useCallback(() => {
-    const blankNote: Note = {
+    const blank: Note = {
       id: `n_${Math.random().toString(36).substring(7)}`,
       userId: user?.id ?? "usr1",
       title: "Untitled Note",
@@ -391,23 +415,20 @@ export default function Home() {
     };
 
     if (!isDemo && token) {
-      api.createNote(token, blankNote.title).then((raw) =>
-        setNotes([normaliseNote(raw), ...notes])
-      );
+      api.createNote(token, blank.title)
+        .then((raw) => setNotes([normaliseNote(raw), ...notes]))
+        .catch(() => setNotes([blank, ...notes]));
     } else {
-      setNotes([blankNote, ...notes]);
+      setNotes([blank, ...notes]);
     }
   }, [token, isDemo, notes, user]);
 
   const handleSaveNote = useCallback(
     async (id: string, title: string, content: string) => {
-      if (isDemo) {
-        setNotes(notes.map((n) => n.id === id ? { ...n, title, content, updatedAt: new Date().toISOString() } : n));
-        return;
+      setNotes(notes.map((n) => n.id === id ? { ...n, title, content, updatedAt: new Date().toISOString() } : n));
+      if (!isDemo && token) {
+        await api.updateNote(token, id, { title, content }).catch(() => {});
       }
-      if (!token) return;
-      const raw = await api.updateNote(token, id, { title, content });
-      setNotes(notes.map((n) => n.id === id ? normaliseNote(raw) : n));
     },
     [token, isDemo, notes]
   );
@@ -415,7 +436,7 @@ export default function Home() {
   const handleDeleteNote = useCallback(
     (id: string) => {
       setNotes(notes.filter((n) => n.id !== id));
-      if (!isDemo && token) api.deleteNote(token, id);
+      if (!isDemo && token) api.deleteNote(token, id).catch(() => {});
     },
     [token, isDemo, notes]
   );
@@ -423,52 +444,46 @@ export default function Home() {
   const handleToggleNoteFavorite = useCallback(
     (id: string, current: boolean) => {
       setNotes(notes.map((n) => n.id === id ? { ...n, isFavorite: !current } : n));
-      if (!isDemo && token) api.updateNote(token, id, { isFavorite: !current });
+      if (!isDemo && token) api.updateNote(token, id, { isFavorite: !current }).catch(() => {});
     },
     [token, isDemo, notes]
   );
 
-  // ─── AI ──────────────────────────────────────────────────────────────────
+  // ─── AI ─────────────────────────────────────────────────────────────────
 
   const handleAiSend = useCallback(() => {
     if (!aiPrompt.trim() || aiLoading) return;
 
-    const userMsg = { sender: "user" as const, text: aiPrompt };
-    setAiChat((prev) => [...prev, userMsg]);
+    setAiChat((prev) => [...prev, { sender: "user", text: aiPrompt }]);
     const promptText = aiPrompt;
     setAiPrompt("");
     setAiLoading(true);
 
     if (!isDemo && token) {
       api.queryAI(token, promptText)
-        .then(({ reply }) => {
-          setAiChat((prev) => [...prev, { sender: "ai" as const, text: reply }]);
-        })
-        .catch(() => {
-          setAiChat((prev) => [...prev, { sender: "ai" as const, text: "⚠️ AI service unavailable. Please try again." }]);
-        })
+        .then(({ reply }) => setAiChat((prev) => [...prev, { sender: "ai", text: reply }]))
+        .catch(() => setAiChat((prev) => [...prev, { sender: "ai", text: "⚠️ AI service unavailable. Please try again." }]))
         .finally(() => setAiLoading(false));
     } else {
-      // Demo mock response
       setTimeout(() => {
-        const reply = `[AI Cloud Terminal] Semantic analysis completed for:\n"${promptText}"\n\nKey findings:\n- Vector overlap matches structural design targets.\n- Client-side encryption layers verified.\n\nRecommendation: Continue utilizing zero-knowledge schemas.`;
-        setAiChat((prev) => [...prev, { sender: "ai" as const, text: reply }]);
+        const reply = `[AI Cloud Terminal] Semantic analysis complete for:\n"${promptText}"\n\nKey findings:\n- Vector overlap matches structural design targets.\n- Client-side encryption layers verified.\n\nRecommendation: Continue utilizing zero-knowledge schemas.`;
+        setAiChat((prev) => [...prev, { sender: "ai", text: reply }]);
         setAiLoading(false);
       }, 1400);
     }
   }, [aiPrompt, aiLoading, token, isDemo]);
 
-  // ─── Settings ─────────────────────────────────────────────────────────────
+  // ─── Settings ────────────────────────────────────────────────────────────
 
   const handleSavePipelineCredentials = useCallback(
     async (botToken: string, channelId: number) => {
       if (!token || isDemo) return;
-      await api.updateSettings(token, { telegramBotToken: botToken, telegramChannelId: channelId });
+      await api.updateSettings(token, { telegramBotToken: botToken, telegramChannelId: channelId }).catch(() => {});
     },
     [token, isDemo]
   );
 
-  // ─── Render ───────────────────────────────────────────────────────────────
+  // ─── Render ──────────────────────────────────────────────────────────────
 
   if (!token) {
     return (
@@ -476,6 +491,7 @@ export default function Home() {
         theme={theme}
         setTheme={setTheme}
         onDemoLogin={handleDemoLogin}
+        onTelegramLogin={handleTelegramLogin}
         loading={loading}
       />
     );
@@ -495,10 +511,7 @@ export default function Home() {
         folderPath={folderPath}
         setCurrentFolderId={(id) => {
           setCurrentFolderId(id);
-          // Trim folder path when navigating to root
-          if (id === null) {
-            useAppStore.getState().setFolderPath([]);
-          }
+          if (id === null) setFolderPath([]);
         }}
         onLogout={logout}
       />

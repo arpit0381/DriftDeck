@@ -1,53 +1,62 @@
-import { TelegramClient, Api } from 'gramjs';
-import { StringSession } from 'gramjs/sessions/index.js';
-import { CustomFile } from 'gramjs/client/uploads.js';
-import { getTelegramBotInstance } from './telegramBotService.js';
+import { TelegramClient, Api } from 'telegram';
+import { StringSession } from 'telegram/sessions/index.js';
+import { CustomFile } from 'telegram/client/uploads.js';
+import { supabase } from '../config/supabase.js';
 
 const apiId = Number(process.env.TELEGRAM_API_ID) || 0;
 const apiHash = process.env.TELEGRAM_API_HASH || '';
 
-// Centralized cache of authenticated GramJS client instances
+// Cached authenticated clients keyed by bot token
 const clientCache: Record<string, TelegramClient> = {};
 
-export async function getMTProtoClient(userId?: string): Promise<{ client: TelegramClient; channelId: string }> {
-  // 1. Resolve credentials
+async function resolveBotCredentials(userId?: string): Promise<{ botToken: string; channelId: string }> {
   let botToken = process.env.TELEGRAM_BOT_TOKEN || '';
   let channelId = process.env.TELEGRAM_CHANNEL_ID || '';
 
-  // Get bot token and channel ID from environment or user settings
-  const botInfo = await getTelegramBotInstance(userId);
-  botToken = botInfo.bot.token;
-  channelId = botInfo.channelId;
+  if (userId) {
+    const { data: settings } = await supabase
+      .from('settings')
+      .select('telegram_bot_token, telegram_channel_id')
+      .eq('user_id', userId)
+      .single();
 
-  const cacheKey = botToken;
-
-  if (clientCache[cacheKey]) {
-    const cachedClient = clientCache[cacheKey];
-    if (cachedClient.connected) {
-      return { client: cachedClient, channelId };
+    if (settings?.telegram_bot_token && settings?.telegram_channel_id) {
+      botToken = settings.telegram_bot_token;
+      channelId = String(settings.telegram_channel_id);
     }
   }
 
-  if (!apiId || !apiHash) {
-    throw new Error('TELEGRAM_API_ID and TELEGRAM_API_HASH must be configured in environment');
+  if (!botToken || !channelId) {
+    throw new Error('Telegram credentials not configured. Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL_ID in env or user settings.');
   }
 
-  // Create an MTProto client using a StringSession
+  return { botToken, channelId };
+}
+
+export async function getMTProtoClient(userId?: string): Promise<{ client: TelegramClient; channelId: string }> {
+  const { botToken, channelId } = await resolveBotCredentials(userId);
+
+  if (!apiId || !apiHash) {
+    throw new Error('TELEGRAM_API_ID and TELEGRAM_API_HASH must be set in environment variables.');
+  }
+
+  // Return cached connected client
+  const cached = clientCache[botToken];
+  if (cached?.connected) {
+    return { client: cached, channelId };
+  }
+
   const stringSession = new StringSession('');
   const client = new TelegramClient(stringSession, apiId, apiHash, {
     connectionRetries: 5,
   });
 
-  // Start client using botAuthToken
-  await client.start({
-    botAuthToken: botToken,
-  });
+  await client.start({ botAuthToken: botToken });
 
-  clientCache[cacheKey] = client;
+  clientCache[botToken] = client;
   return { client, channelId };
 }
 
-// Upload large file in chunks using GramJS MTProto
 export async function uploadLargeFileMTProto(
   userId: string,
   fileBuffer: Buffer,
@@ -57,44 +66,31 @@ export async function uploadLargeFileMTProto(
 ): Promise<{ fileId: string; messageId: number; channelId: number }> {
   const { client, channelId } = await getMTProtoClient(userId);
 
-  // Wrap buffer into custom file format GramJS expects
   const toUpload = new CustomFile(fileName, fileBuffer.length, fileName, fileBuffer);
 
-  // Upload file to Telegram servers
   const uploadedFile = await client.uploadFile({
     file: toUpload,
     workers: 4,
-    onProgress: onProgress ? (progress: number) => onProgress(progress) : undefined,
+    onProgress: onProgress ? (p: number) => onProgress(p) : undefined,
   });
 
-  // Post document message to channel
   const entity = await client.getEntity(channelId);
-  const result = await client.sendFile(entity, {
+  const result = (await client.sendFile(entity, {
     file: uploadedFile,
-    caption: `Drift Deck Upload (Large): ${fileName}`,
-    attributes: [
-      new Api.DocumentAttributeFilename({
-        fileName: fileName,
-      }),
-    ],
-  }) as Api.Message;
+    caption: `☁️ Drift Deck: ${fileName}`,
+    attributes: [new Api.DocumentAttributeFilename({ fileName })],
+  })) as Api.Message;
 
-  // Extract file ID from resulting message
   const media = result.media as Api.MessageMediaDocument;
   const document = media.document as Api.Document;
-  
-  // Format standard Bot API compatible file_id or MTProto file location variables
-  // Since we'll store and fetch via MTProto in backend, we can store the Document ID
-  const documentId = document.id.toString();
 
   return {
-    fileId: documentId, // Save the GramJS document ID
+    fileId: document.id.toString(),
     messageId: result.id,
     channelId: Number(channelId.replace('-100', '')),
   };
 }
 
-// Download or Stream files directly from MTProto
 export async function downloadFileMTProto(
   userId: string,
   messageId: number,
@@ -103,27 +99,20 @@ export async function downloadFileMTProto(
 ): Promise<Buffer> {
   const { client } = await getMTProtoClient(userId);
 
-  // Parse target channel entity
+  // Normalise channel ID to full format
   const fullChannelId = channelId.startsWith('-100') ? channelId : `-100${channelId}`;
   const entity = await client.getEntity(fullChannelId);
 
-  // Fetch target message
   const messages = await client.getMessages(entity, { ids: [messageId] });
-  if (!messages || messages.length === 0 || !messages[0].media) {
-    throw new Error('Message or media not found');
+  if (!messages?.length || !messages[0]?.media) {
+    throw new Error('Message or media not found in Telegram channel.');
   }
 
-  const media = messages[0].media;
-
-  // Download media buffer
-  const buffer = await client.downloadMedia(media, {
+  const buffer = await client.downloadMedia(messages[0].media, {
     workers: 4,
-    progressCallback: onProgress ? (progress: any) => onProgress(progress) : undefined,
+    progressCallback: onProgress ? (p: any) => onProgress(p) : undefined,
   });
 
-  if (!buffer) {
-    throw new Error('Failed to download file from MTProto stream');
-  }
-
+  if (!buffer) throw new Error('Download returned empty buffer.');
   return buffer as Buffer;
 }

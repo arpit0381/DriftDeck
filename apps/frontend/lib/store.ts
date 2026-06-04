@@ -76,7 +76,7 @@ export const useAppStore = create<AppState>((set) => ({
   },
 
   // Auth
-  token: typeof window !== 'undefined' ? localStorage.getItem('drift-deck-token') : null,
+  token: null, // Hydrated from localStorage in useEffect on client
   user: null,
   settings: null,
   setAuth: (token, user, settings) => {

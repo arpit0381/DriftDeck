@@ -1,29 +1,37 @@
+const path = require('path');
+const rootNodeModules = path.resolve(__dirname, '../../node_modules');
+const frontendNodeModules = path.resolve(__dirname, 'node_modules');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
-  // Static export — this is a client-rendered SPA backed by a separate Express API
-  output: 'export',
-  trailingSlash: true,
+  reactStrictMode: false,
+  swcMinify: true,
+  transpilePackages: ['@drift-deck/types', '@drift-deck/utils'],
   images: {
-    // Static export requires unoptimized images (or a custom loader)
-    unoptimized: true,
     remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 't.me',
-      },
-      {
-        protocol: 'https',
-        hostname: 'api.telegram.org',
-      },
+      { protocol: 'https', hostname: 't.me' },
+      { protocol: 'https', hostname: 'api.telegram.org' },
     ],
   },
-  eslint: {
-    ignoreDuringBuilds: true,
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },
+  webpack(config, { isServer }) {
+    // Single React instance — use the frontend's local copy for everything.
+    // This prevents dual-React context null errors in a monorepo where
+    // some deps are hoisted to root node_modules.
+    const reactPath = path.resolve(frontendNodeModules, 'react');
+    const reactDomPath = path.resolve(frontendNodeModules, 'react-dom');
+
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      react: reactPath,
+      'react-dom': reactDomPath,
+      'react/jsx-runtime': path.resolve(reactPath, 'jsx-runtime'),
+      'react/jsx-dev-runtime': path.resolve(reactPath, 'jsx-dev-runtime'),
+    };
+
+    return config;
   },
-  typescript: {
-    ignoreBuildErrors: true,
-  }
 };
 
 module.exports = nextConfig;
