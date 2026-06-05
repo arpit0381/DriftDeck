@@ -79,7 +79,6 @@ function TelegramBotLogin({ onLogin }: { onLogin: (jwt: string) => void }) {
   const handleClick = () => {
     setStep("waiting");
     startPolling();
-    window.open(deepLink, "_blank");
   };
 
   // Cleanup on unmount and handle mobile browser tab switching
@@ -118,12 +117,14 @@ function TelegramBotLogin({ onLogin }: { onLogin: (jwt: string) => void }) {
           The Telegram bot should have opened.<br />
           Send <span className="text-slate-400 font-bold">/start</span> to complete login.
         </p>
-        <button
-          onClick={() => window.open(deepLink, "_blank")}
-          className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors text-center"
+        <a
+          href={deepLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors text-center block w-full"
         >
           Didn't open? Click here to open bot again →
-        </button>
+        </a>
         <button
           onClick={() => { if (pollInterval) clearInterval(pollInterval); setStep("idle"); }}
           className="text-[10px] text-slate-600 hover:text-slate-400 transition-colors text-center"
@@ -135,7 +136,10 @@ function TelegramBotLogin({ onLogin }: { onLogin: (jwt: string) => void }) {
   }
 
   return (
-    <button
+    <a
+      href={deepLink}
+      target="_blank"
+      rel="noopener noreferrer"
       onClick={handleClick}
       className="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-3 transition-all active:scale-95 hover:scale-[1.01]"
       style={{
@@ -149,7 +153,7 @@ function TelegramBotLogin({ onLogin }: { onLogin: (jwt: string) => void }) {
         <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z"/>
       </svg>
       Sign in with Telegram
-    </button>
+    </a>
   );
 }
 
