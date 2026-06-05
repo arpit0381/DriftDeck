@@ -26,8 +26,6 @@ const nextConfig = {
       ...config.resolve.alias,
       react: reactPath,
       'react-dom': reactDomPath,
-      'react/jsx-runtime': path.resolve(reactPath, 'jsx-runtime'),
-      'react/jsx-dev-runtime': path.resolve(reactPath, 'jsx-dev-runtime'),
     };
 
     return config;

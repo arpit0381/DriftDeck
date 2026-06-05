@@ -146,6 +146,7 @@ export async function streamMediaMTProto(
     for await (const chunk of client.iterDownload({
       file: media,
       offset: bigInt(alignedStart),
+      requestSize: 512 * 1024,
     })) {
       let data = chunk as Buffer;
       if (skipBytes > 0) {
