@@ -2,9 +2,5 @@
   "version": 2,
   "framework": "nextjs",
   "installCommand": "cd ../.. && npm install --legacy-peer-deps",
-  "buildCommand": "npm run build",
-  "env": {
-    "NEXT_PUBLIC_API_URL": "@api_url",
-    "NEXT_PUBLIC_TELEGRAM_BOT_USERNAME": "@telegram_bot_username"
-  }
+  "buildCommand": "npm run build"
 }
