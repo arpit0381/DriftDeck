@@ -1,5 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import ws from 'ws';
+
+// Polyfill WebSocket for Node.js environments < 22 (like Render)
+if (typeof global !== 'undefined' && !global.WebSocket) {
+  (global as any).WebSocket = ws;
+}
 
 dotenv.config();
 
