@@ -109,7 +109,6 @@ export async function downloadFileMTProto(
   }
 
   const buffer = await client.downloadMedia(messages[0].media, {
-    workers: 4,
     progressCallback: onProgress ? (p: any) => onProgress(p) : undefined,
   });
 
