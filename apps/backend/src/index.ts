@@ -17,7 +17,7 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: '*', // Customize for production: specify Next.js app host
+  origin: true, // Reflects the exact request origin instead of '*' to allow credentials: true on Safari/Mobile
   credentials: true,
 }));
 
