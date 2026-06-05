@@ -19,8 +19,8 @@ const nextConfig = {
     // Single React instance — use the frontend's local copy for everything.
     // This prevents dual-React context null errors in a monorepo where
     // some deps are hoisted to root node_modules.
-    const reactPath = path.resolve(frontendNodeModules, 'react');
-    const reactDomPath = path.resolve(frontendNodeModules, 'react-dom');
+    const reactPath = path.dirname(require.resolve('react/package.json'));
+    const reactDomPath = path.dirname(require.resolve('react-dom/package.json'));
 
     config.resolve.alias = {
       ...config.resolve.alias,

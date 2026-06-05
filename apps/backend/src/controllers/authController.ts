@@ -171,6 +171,35 @@ export async function telegramWebhookLogin(req: Request, res: Response) {
 }
 
 /**
+ * GET /api/auth/poll/:sessionId
+ * Frontend calls this every 2s after opening the bot.
+ * Returns JWT when the user has completed /start in the bot.
+ */
+export async function pollAuthSession(req: Request, res: Response) {
+  const { sessionId } = req.params;
+  if (!sessionId) return res.status(400).json({ error: 'Missing sessionId' });
+
+  try {
+    const { data, error } = await supabase
+      .from('auth_sessions')
+      .select('jwt_token')
+      .eq('session_id', sessionId)
+      .single();
+
+    if (error || !data?.jwt_token) {
+      return res.status(202).json({ pending: true }); // Still waiting
+    }
+
+    // Delete session after retrieval (one-time use)
+    await supabase.from('auth_sessions').delete().eq('session_id', sessionId);
+
+    return res.status(200).json({ token: data.jwt_token });
+  } catch {
+    return res.status(500).json({ error: 'Poll failed' });
+  }
+}
+
+/**
  * GET /api/auth/me
  * Returns the current user's profile and settings.
  */

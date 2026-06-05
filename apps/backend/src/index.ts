@@ -57,4 +57,19 @@ app.listen(PORT, () => {
   console.log(`⚡ DRIFT DECK BACKEND OS OPERATIONAL`);
   console.log(`⚡ LISTENING ON PORT: http://localhost:${PORT}`);
   console.log(`========================================================`);
+
+  // Local development: Poll Telegram and forward to our webhook
+  if (process.env.NODE_ENV !== 'production' && process.env.TELEGRAM_BOT_TOKEN) {
+    console.log(`⚡ Starting local Telegram polling...`);
+    const TelegramBot = require('node-telegram-bot-api');
+    const localBot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
+    
+    localBot.on('message', (msg: any) => {
+      fetch(`http://localhost:${PORT}/api/auth/telegram-webhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg })
+      }).catch(err => console.error('Local webhook forward failed:', err));
+    });
+  }
 });
