@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   Folder, FileText, Sparkles, Settings as SettingsIcon,
@@ -39,6 +39,36 @@ const THEMES: { value: ThemeType; label: string }[] = [
 // Works on localhost AND production — no domain restriction.
 // Flow: User clicks → opens Telegram bot → sends /start <sessionId>
 //       → backend creates account & stores JWT → frontend polls & auto-logs in
+
+function TelegramLoginWidget({ onAuth }: { onAuth: (user: TelegramAuthData) => void }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    (window as any).onTelegramAuth = (user: TelegramAuthData) => {
+      onAuth(user);
+    };
+
+    const script = document.createElement("script");
+    script.src = "https://telegram.org/js/telegram-widget.js?22";
+    script.setAttribute("data-telegram-login", process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "driftdeck_bot");
+    script.setAttribute("data-size", "large");
+    script.setAttribute("data-radius", "12");
+    script.setAttribute("data-onauth", "onTelegramAuth(user)");
+    script.setAttribute("data-request-access", "write");
+    script.async = true;
+
+    if (containerRef.current) {
+      containerRef.current.innerHTML = "";
+      containerRef.current.appendChild(script);
+    }
+
+    return () => {
+      delete (window as any).onTelegramAuth;
+    };
+  }, [onAuth]);
+
+  return <div ref={containerRef} className="flex justify-center w-full" />;
+}
 
 function TelegramBotLogin({ onLogin }: { onLogin: (jwt: string) => void }) {
   const [sessionId] = useState(() => Math.random().toString(36).substring(2, 12));
@@ -261,6 +291,13 @@ export default function LandingPage({
               Login via Telegram Bot
             </p>
             <TelegramBotLogin onLogin={handleBotLogin} />
+          </div>
+
+          <div className="w-full mt-2">
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-3 font-mono text-center">
+              Or use Official Widget
+            </p>
+            <TelegramLoginWidget onAuth={onTelegramLogin} />
           </div>
 
           <div className="flex items-center gap-3 w-full">
