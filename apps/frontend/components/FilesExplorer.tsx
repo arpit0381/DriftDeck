@@ -211,8 +211,8 @@ export default function FilesExplorer({
         {visibleFiles.map((file) => (
           <div
             key={file.id}
-            className="px-4 py-3.5 border-b border-border/10 grid grid-cols-12 gap-2 text-xs font-semibold hover:bg-primary/5 items-center transition-colors"
-            onClick={(e) => e.stopPropagation()}
+            className="px-4 py-3.5 border-b border-border/10 grid grid-cols-12 gap-2 text-xs font-semibold hover:bg-primary/5 items-center transition-colors cursor-pointer"
+            onClick={(e) => { e.stopPropagation(); onPreviewFile(file.id, file.mimeType); }}
           >
             <div className="col-span-5 flex items-center gap-2 min-w-0">
               <MimeIcon mime={file.mimeType} />

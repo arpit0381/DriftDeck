@@ -185,6 +185,7 @@ export default function App() {
   const [aiLoading, setAiLoading] = useState(false);
 
   const [previewFile, setPreviewFile] = useState<FileMetadata | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // ─── Hydrate from localStorage ───────────────────────────────────────────
 
@@ -547,14 +548,23 @@ export default function App() {
           if (id === null) setFolderPath([]);
         }}
         onLogout={logout}
+        onToggleMobileMenu={() => setIsMobileMenuOpen(true)}
       />
 
       <div className="flex flex-1 overflow-hidden relative z-10">
         <Sidebar
           activeTab={activeTab}
-          setActiveTab={setActiveTab}
+          setActiveTab={(tab) => {
+            setActiveTab(tab);
+            setIsMobileMenuOpen(false);
+          }}
           masterKey={masterKey}
-          onSetupKey={() => setActiveTab("settings")}
+          onSetupKey={() => {
+            setActiveTab("settings");
+            setIsMobileMenuOpen(false);
+          }}
+          isMobileOpen={isMobileMenuOpen}
+          onCloseMobile={() => setIsMobileMenuOpen(false)}
         />
 
         <main className="flex-1 overflow-y-auto p-6">

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, Palette, Terminal, User, LogOut } from "lucide-react";
+import { ChevronRight, Palette, Terminal, User, LogOut, Menu } from "lucide-react";
 import { ActiveTab, ThemeType } from "../lib/store";
 import { Folder } from "@drift-deck/types";
 
@@ -11,7 +11,9 @@ interface DashboardHeaderProps {
   activeTab: ActiveTab;
   folderPath: Folder[];
   setCurrentFolderId: (id: string | null) => void;
+  setCurrentFolderId: (id: string | null) => void;
   onLogout: () => void;
+  onToggleMobileMenu?: () => void;
 }
 
 const THEMES: { value: ThemeType; label: string }[] = [
@@ -30,18 +32,24 @@ export default function DashboardHeader({
   folderPath,
   setCurrentFolderId,
   onLogout,
+  onToggleMobileMenu,
 }: DashboardHeaderProps) {
   return (
     <header className="h-16 bg-card border-b border-border px-6 flex items-center justify-between relative z-20 backdrop-blur-md flex-shrink-0">
-      <div className="flex items-center gap-6">
-        {/* Logo */}
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/20 glow-border">
-            <Terminal className="w-4 h-4 text-white" />
+      <div className="flex items-center gap-4">
+        {/* Mobile menu toggle */}
+        <button
+          onClick={onToggleMobileMenu}
+          className="md:hidden p-2 -ml-2 rounded-lg text-muted hover:text-foreground hover:bg-border/30 transition-all"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+
+        {/* Logo (Visible only on mobile) */}
+        <div className="flex md:hidden items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-black/50 flex items-center justify-center shadow-lg shadow-primary/20 glow-border overflow-hidden">
+            <img src="/logo.png" alt="Logo" className="w-full h-full object-cover" />
           </div>
-          <span className="font-mono text-sm font-black tracking-widest bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent glow-text">
-            DRIFT DECK
-          </span>
         </div>
 
         {/* Breadcrumbs for file explorer */}

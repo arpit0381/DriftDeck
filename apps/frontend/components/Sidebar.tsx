@@ -17,6 +17,8 @@ interface SidebarProps {
   setActiveTab: (tab: ActiveTab) => void;
   masterKey: string | null;
   onSetupKey: () => void;
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 const NAV_ITEMS: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
@@ -29,25 +31,51 @@ const NAV_ITEMS: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
   { id: "settings", label: "Settings", icon: <SettingsIcon className="w-4 h-4" /> },
 ];
 
-export default function Sidebar({ activeTab, setActiveTab, masterKey, onSetupKey }: SidebarProps) {
+export default function Sidebar({ activeTab, setActiveTab, masterKey, onSetupKey, isMobileOpen, onCloseMobile }: SidebarProps) {
   return (
-    <aside className="w-64 bg-card/60 border-r border-border p-4 flex-col justify-between hidden md:flex backdrop-blur-md flex-shrink-0">
-      <nav className="flex flex-col gap-1.5">
-        {NAV_ITEMS.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setActiveTab(item.id)}
-            className={`w-full h-10 rounded-xl flex items-center px-4 gap-3 text-sm font-semibold transition-all ${
-              activeTab === item.id
-                ? "bg-primary/20 text-primary border border-primary/30 glow-border"
-                : "hover:bg-slate-900/30 text-muted hover:text-foreground"
-            }`}
-          >
+    <>
+      {/* Mobile Backdrop Overlay */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 md:hidden"
+          onClick={onCloseMobile}
+        />
+      )}
+      
+      <aside
+        className={`w-64 bg-card/95 border-r border-border p-4 flex-col justify-between flex-shrink-0 absolute md:relative z-50 h-full transition-transform duration-300 ${
+          isMobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0"
+        } flex`}
+      >
+        <div>
+        {/* Logo Section */}
+        <div className="flex items-center gap-3 mb-8 px-2">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center glow-border overflow-hidden bg-black/50">
+            <img src="/logo.png" alt="DriftDeck" className="w-full h-full object-cover" />
+          </div>
+          <span className="font-mono text-lg font-black tracking-widest text-foreground glow-text">
+            DRIFT DECK
+          </span>
+        </div>
+
+        <nav className="flex flex-col gap-1.5">
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`w-full h-10 rounded-xl flex items-center px-4 gap-3 text-sm font-semibold transition-all ${
+                activeTab === item.id
+                  ? "bg-primary/20 text-primary border border-primary/30 glow-border"
+                  : "hover:bg-card-foreground/10 text-muted hover:text-foreground"
+              }`}
+            >
             {item.icon}
             {item.label}
           </button>
         ))}
       </nav>
+
+      </div>
 
       {/* Encryption status widget */}
       <div className="glass-panel p-4 rounded-xl border-border flex flex-col gap-2 mt-4">
@@ -71,5 +99,6 @@ export default function Sidebar({ activeTab, setActiveTab, masterKey, onSetupKey
         )}
       </div>
     </aside>
+    </>
   );
 }
