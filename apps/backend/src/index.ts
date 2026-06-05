@@ -71,5 +71,17 @@ app.listen(PORT, () => {
         body: JSON.stringify({ message: msg })
       }).catch(err => console.error('Local webhook forward failed:', err));
     });
+  } else if (process.env.NODE_ENV === 'production' && process.env.TELEGRAM_BOT_TOKEN) {
+    const TelegramBot = require('node-telegram-bot-api');
+    const prodBot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false });
+    const webhookDomain = process.env.RENDER_EXTERNAL_URL || process.env.API_URL;
+    if (webhookDomain) {
+      const fullWebhookUrl = `${webhookDomain}/api/auth/telegram-webhook`;
+      prodBot.setWebHook(fullWebhookUrl)
+        .then(() => console.log(`⚡ Telegram Webhook successfully set to: ${fullWebhookUrl}`))
+        .catch((err: any) => console.error('⚡ Failed to set Telegram webhook:', err));
+    } else {
+      console.warn('⚡ WARNING: No RENDER_EXTERNAL_URL or API_URL found. Telegram webhook NOT set.');
+    }
   }
 });

@@ -50,21 +50,27 @@ function TelegramBotLogin({ onLogin }: { onLogin: (jwt: string) => void }) {
   const deepLink = `https://t.me/${botUsername}?start=${sessionId}`;
   const pollUrl = `${apiUrl}/api/auth/poll/${sessionId}`;
 
+  const pollNow = async () => {
+    try {
+      const res = await fetch(pollUrl);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.token) {
+          setStep("success");
+          onLogin(data.token);
+          return true;
+        }
+      }
+    } catch {
+      // Keep polling silently
+    }
+    return false;
+  };
+
   const startPolling = () => {
     const interval = setInterval(async () => {
-      try {
-        const res = await fetch(pollUrl);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.token) {
-            clearInterval(interval);
-            setStep("success");
-            onLogin(data.token);
-          }
-        }
-      } catch {
-        // Keep polling silently
-      }
+      const success = await pollNow();
+      if (success) clearInterval(interval);
     }, 2000);
     setPollInterval(interval);
     return interval;
@@ -76,10 +82,21 @@ function TelegramBotLogin({ onLogin }: { onLogin: (jwt: string) => void }) {
     window.open(deepLink, "_blank");
   };
 
-  // Cleanup on unmount
+  // Cleanup on unmount and handle mobile browser tab switching
   useEffect(() => {
-    return () => { if (pollInterval) clearInterval(pollInterval); };
-  }, [pollInterval]);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && step === 'waiting') {
+        pollNow();
+      }
+    };
+    
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    
+    return () => { 
+      if (pollInterval) clearInterval(pollInterval); 
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [pollInterval, step]);
 
   if (step === "success") {
     return (
