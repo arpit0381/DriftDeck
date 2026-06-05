@@ -122,6 +122,9 @@ export async function loginWithTelegram(req: Request, res: Response) {
   }
 }
 
+// Temporary in-memory store for short-lived auth sessions
+const authSessions = new Map<string, string>();
+
 /**
  * POST /api/auth/telegram-webhook
  * Handles Telegram Bot update messages.
@@ -158,9 +161,9 @@ export async function telegramWebhookLogin(req: Request, res: Response) {
     // If /start was sent with a session ID, store the token for polling
     const sessionId = text.replace('/start', '').trim();
     if (sessionId) {
-      await supabase
-        .from('auth_sessions')
-        .upsert({ session_id: sessionId, jwt_token: token, user_id: user.id, created_at: new Date().toISOString() });
+      // Store in memory for 5 minutes instead of missing db table
+      authSessions.set(sessionId, token);
+      setTimeout(() => authSessions.delete(sessionId), 5 * 60 * 1000);
     }
 
     return res.status(200).json({ ok: true });
@@ -180,20 +183,16 @@ export async function pollAuthSession(req: Request, res: Response) {
   if (!sessionId) return res.status(400).json({ error: 'Missing sessionId' });
 
   try {
-    const { data, error } = await supabase
-      .from('auth_sessions')
-      .select('jwt_token')
-      .eq('session_id', sessionId)
-      .single();
+    const token = authSessions.get(sessionId);
 
-    if (error || !data?.jwt_token) {
+    if (!token) {
       return res.status(202).json({ pending: true }); // Still waiting
     }
 
     // Delete session after retrieval (one-time use)
-    await supabase.from('auth_sessions').delete().eq('session_id', sessionId);
+    authSessions.delete(sessionId);
 
-    return res.status(200).json({ token: data.jwt_token });
+    return res.status(200).json({ token });
   } catch {
     return res.status(500).json({ error: 'Poll failed' });
   }

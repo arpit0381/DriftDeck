@@ -28,7 +28,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // Rate limiting to prevent abuse
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per window
+  max: 10000, // Increased limit so local frontend polling doesn't trigger 429
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests from this IP, please try again later' },

@@ -224,10 +224,22 @@ export default function App() {
 
   // ─── Telegram real login ─────────────────────────────────────────────────
 
-  const handleTelegramLogin = useCallback(async (data: TelegramAuthData) => {
+  const handleTelegramLogin = useCallback(async (data: any) => {
     setLoading(true);
     try {
-      const { token: jwt, user: u } = await api.loginWithTelegram(data as any);
+      if (data._jwt) {
+        // Already logged in via bot deep link
+        const jwt = data._jwt;
+        const { settings: s } = await api.getMe(jwt);
+        // remove _jwt before storing user state to keep it clean
+        const { _jwt, ...userObj } = data;
+        setAuth(jwt, userObj, s);
+        confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+        return;
+      }
+
+      // Legacy Telegram Login Widget flow
+      const { token: jwt, user: u } = await api.loginWithTelegram(data);
       // Fetch settings after login
       const { settings: s } = await api.getMe(jwt);
       setAuth(jwt, u, s);
