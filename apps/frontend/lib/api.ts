@@ -101,19 +101,50 @@ export function uploadFile(
   file: File,
   folderId?: string | null,
   isEncrypted?: boolean,
-  encryptionSalt?: string
+  encryptionSalt?: string,
+  onProgress?: (progress: number) => void
 ): Promise<import("@drift-deck/types").FileMetadata> {
-  const form = new FormData();
-  form.append("file", file);
-  if (folderId) form.append("folderId", folderId);
-  if (isEncrypted) form.append("isEncrypted", "true");
-  if (encryptionSalt) form.append("encryptionSalt", encryptionSalt);
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (folderId) form.append("folderId", folderId);
+    if (isEncrypted) form.append("isEncrypted", "true");
+    if (encryptionSalt) form.append("encryptionSalt", encryptionSalt);
 
-  return request(
-    "/files/upload",
-    { method: "POST", body: form },
-    token
-  );
+    const xhr = new XMLHttpRequest();
+    const url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
+
+    xhr.open("POST", `${url}/files/upload`, true);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+    if (onProgress) {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percentComplete = Math.round((event.loaded / event.total) * 100);
+          onProgress(percentComplete);
+        }
+      };
+    }
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          resolve(response);
+        } catch (e) {
+          reject(new Error("Failed to parse response"));
+        }
+      } else {
+        reject(new Error(`Upload failed with status ${xhr.status}: ${xhr.responseText}`));
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error("Network error during upload"));
+    };
+
+    xhr.send(form);
+  });
 }
 
 export function renameFile(
@@ -165,6 +196,10 @@ export function restoreFile(
 
 export function getFileDownloadUrl(id: string): string {
   return `${API_URL}/files/${id}/download`;
+}
+
+export function getFileStreamUrl(id: string, token: string): string {
+  return `${API_URL}/files/${id}/stream?token=${token}`;
 }
 
 // ─── Folders ─────────────────────────────────────────────────────────────────

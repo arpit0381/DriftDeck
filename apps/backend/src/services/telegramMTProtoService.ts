@@ -2,6 +2,7 @@ import { TelegramClient, Api } from 'telegram';
 import { StringSession } from 'telegram/sessions/index.js';
 import { CustomFile } from 'telegram/client/uploads.js';
 import { supabase } from '../config/supabase.js';
+import bigInt from 'big-integer';
 
 const apiId = Number(process.env.TELEGRAM_API_ID) || 0;
 const apiHash = process.env.TELEGRAM_API_HASH || '';
@@ -59,14 +60,15 @@ export async function getMTProtoClient(userId?: string): Promise<{ client: Teleg
 
 export async function uploadLargeFileMTProto(
   userId: string,
-  fileBuffer: Buffer,
+  filePath: string,
+  fileSize: number,
   fileName: string,
   mimeType: string,
   onProgress?: (progress: number) => void
 ): Promise<{ fileId: string; messageId: number; channelId: number }> {
   const { client, channelId } = await getMTProtoClient(userId);
 
-  const toUpload = new CustomFile(fileName, fileBuffer.length, fileName, fileBuffer);
+  const toUpload = new CustomFile(fileName, fileSize, filePath);
 
   const uploadedFile = await client.uploadFile({
     file: toUpload,
@@ -114,4 +116,54 @@ export async function downloadFileMTProto(
 
   if (!buffer) throw new Error('Download returned empty buffer.');
   return buffer as Buffer;
+}
+
+export async function streamMediaMTProto(
+  userId: string,
+  messageId: number,
+  channelId: string,
+  res: any,
+  start: number,
+  end: number
+) {
+  const { client } = await getMTProtoClient(userId);
+
+  const fullChannelId = channelId.startsWith('-100') ? channelId : `-100${channelId}`;
+  const entity = await client.getEntity(fullChannelId);
+
+  const messages = await client.getMessages(entity, { ids: [messageId] });
+  if (!messages?.length || !messages[0]?.media) {
+    throw new Error('Message or media not found in Telegram channel.');
+  }
+
+  const media = messages[0].media;
+  const CHUNK_SIZE = 512 * 1024; // Telegram MTProto chunk size is typically 512KB
+  const alignedStart = Math.floor(start / CHUNK_SIZE) * CHUNK_SIZE;
+  let skipBytes = start - alignedStart;
+  let bytesToRead = end - start + 1;
+
+  try {
+    for await (const chunk of client.iterDownload({
+      file: media,
+      offset: bigInt(alignedStart),
+    })) {
+      let data = chunk as Buffer;
+      if (skipBytes > 0) {
+        data = data.subarray(skipBytes);
+        skipBytes = 0;
+      }
+      if (data.length > bytesToRead) {
+        data = data.subarray(0, bytesToRead);
+      }
+      
+      res.write(data);
+      bytesToRead -= data.length;
+      
+      if (bytesToRead <= 0) break;
+    }
+  } catch (err) {
+    console.error('Error streaming from MTProto:', err);
+  } finally {
+    res.end();
+  }
 }

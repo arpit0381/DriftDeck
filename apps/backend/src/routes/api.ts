@@ -12,6 +12,7 @@ import {
   restoreFile,
   toggleFavorite,
   getFileStats,
+  streamFile,
 } from '../controllers/fileController.js';
 import {
   createFolder,
@@ -30,10 +31,12 @@ import { supabase } from '../config/supabase.js';
 
 const router = Router();
 
-const storage = multer.memoryStorage();
+import os from 'os';
+
+const storage = multer.diskStorage({ dest: os.tmpdir() });
 const upload = multer({
   storage,
-  limits: { fileSize: 2000 * 1024 * 1024 },
+  // No strict fileSize limit here to support arbitrarily large files
 });
 
 // ==========================================
@@ -52,6 +55,7 @@ router.post('/files/upload', requireAuth, upload.single('file'), uploadFile);
 router.get('/files', requireAuth, listFiles);
 router.get('/files/stats', requireAuth, getFileStats);
 router.get('/files/:id/download', requireAuth, downloadFile);
+router.get('/files/:id/stream', requireAuth, streamFile);
 router.patch('/files/:id/rename', requireAuth, renameFile);
 router.patch('/files/:id/move', requireAuth, moveFile);
 router.patch('/files/:id/favorite', requireAuth, toggleFavorite);

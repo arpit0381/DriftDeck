@@ -29,10 +29,12 @@ export async function getTelegramBotInstance(userId?: string): Promise<{ bot: Te
   return { bot, channelId };
 }
 
+import fs from 'fs';
+
 // Upload file to Telegram channel via Bot API
 export async function uploadToTelegramBot(
   userId: string,
-  fileBuffer: Buffer,
+  filePath: string,
   fileName: string,
   mimeType: string
 ): Promise<{ fileId: string; messageId: number; channelId: number }> {
@@ -41,7 +43,7 @@ export async function uploadToTelegramBot(
   // Send document to channel
   const message = await bot.sendDocument(
     channelId,
-    fileBuffer,
+    fs.createReadStream(filePath),
     {
       caption: `Drift Deck Upload: ${fileName}`,
     },

@@ -17,14 +17,24 @@ export default function FilePreviewModal({ file, token, onClose, onDownload }: F
   const [error, setError] = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
 
+  const [streamUrl, setStreamUrl] = useState<string | null>(null);
+
   useEffect(() => {
     if (!file || !token) return;
 
     // Reset state
     setBlobUrl(null);
+    setStreamUrl(null);
     setTextContent(null);
     setError(null);
     setLoading(true);
+
+    const isVideoOrAudio = file.mimeType.startsWith('video/') || file.mimeType.startsWith('audio/');
+    if (isVideoOrAudio) {
+      setStreamUrl(api.getFileStreamUrl(file.id, token));
+      setLoading(false);
+      return;
+    }
 
     const isText = file.mimeType.startsWith('text/') || file.mimeType === 'application/json';
 
@@ -153,12 +163,12 @@ export default function FilePreviewModal({ file, token, onClose, onDownload }: F
                   <img src={blobUrl} alt={file.name} className="max-w-full max-h-[70vh] rounded-lg shadow-lg object-contain" />
                 )}
 
-                {canPreview && blobUrl && isVideo && (
-                  <video src={blobUrl} controls autoPlay className="max-w-full max-h-[70vh] rounded-lg shadow-lg bg-black" />
+                {canPreview && streamUrl && isVideo && (
+                  <video src={streamUrl} controls autoPlay className="max-w-full max-h-[70vh] rounded-lg shadow-lg bg-black" />
                 )}
 
-                {canPreview && blobUrl && isAudio && (
-                  <audio src={blobUrl} controls autoPlay className="w-full max-w-md shadow-lg" />
+                {canPreview && streamUrl && isAudio && (
+                  <audio src={streamUrl} controls autoPlay className="w-full max-w-md shadow-lg" />
                 )}
 
                 {canPreview && blobUrl && isPdf && (

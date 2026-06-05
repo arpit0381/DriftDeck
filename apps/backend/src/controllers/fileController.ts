@@ -1,8 +1,9 @@
 import { Response } from 'express';
 import { supabase } from '../config/supabase.js';
 import { uploadToTelegramBot, getTelegramBotFileUrl } from '../services/telegramBotService.js';
-import { uploadLargeFileMTProto, downloadFileMTProto } from '../services/telegramMTProtoService.js';
+import { uploadLargeFileMTProto, downloadFileMTProto, streamMediaMTProto } from '../services/telegramMTProtoService.js';
 import { AuthRequest } from '../middleware/auth.js';
+import fs from 'fs';
 
 // Max file size for standard Bot API upload (20MB)
 const BOT_API_LIMIT = 20 * 1024 * 1024;
@@ -14,7 +15,7 @@ export async function uploadFile(req: AuthRequest, res: Response) {
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
   if (!file) return res.status(400).json({ error: 'No file provided' });
 
-  const { originalname, mimetype, size, buffer } = file;
+  const { originalname, mimetype, size, path: filePath } = file;
   const folderId = req.body.folderId || null;
   const isEncrypted = req.body.isEncrypted === 'true';
   const encryptionSalt = req.body.encryptionSalt || null;
@@ -24,9 +25,9 @@ export async function uploadFile(req: AuthRequest, res: Response) {
 
     // Direct large vs small upload route
     if (size > BOT_API_LIMIT) {
-      telegramRef = await uploadLargeFileMTProto(userId, buffer, originalname, mimetype);
+      telegramRef = await uploadLargeFileMTProto(userId, filePath, size, originalname, mimetype);
     } else {
-      telegramRef = await uploadToTelegramBot(userId, buffer, originalname, mimetype);
+      telegramRef = await uploadToTelegramBot(userId, filePath, originalname, mimetype);
     }
 
     const { fileId, messageId, channelId } = telegramRef;
@@ -65,6 +66,13 @@ export async function uploadFile(req: AuthRequest, res: Response) {
   } catch (error: any) {
     console.error('Upload error:', error);
     return res.status(500).json({ error: error.message || 'Failed to upload file to Telegram Cloud' });
+  } finally {
+    // Clean up temporary file from disk
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlink(filePath, (err) => {
+        if (err) console.error('Failed to clean up temp file:', filePath, err);
+      });
+    }
   }
 }
 
@@ -201,6 +209,66 @@ export async function downloadFile(req: AuthRequest, res: Response) {
   } catch (error: any) {
     console.error('Download error:', error);
     return res.status(500).json({ error: error.message || 'Failed to download file from Telegram Cloud' });
+  }
+}
+
+export async function streamFile(req: AuthRequest, res: Response) {
+  const userId = req.user?.userId;
+  const { id } = req.params;
+
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    const { data: file, error } = await supabase
+      .from('files')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error || !file) {
+      return res.status(404).json({ error: 'File metadata not found' });
+    }
+
+    if (file.user_id !== userId) {
+      return res.status(403).json({ error: 'Permission denied' });
+    }
+
+    const fileSize = Number(file.size);
+    const range = req.headers.range;
+
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+      if (start >= fileSize) {
+        res.status(416).send('Requested range not satisfiable\n' + start + ' >= ' + fileSize);
+        return;
+      }
+
+      const chunksize = (end - start) + 1;
+      
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunksize,
+        'Content-Type': file.mime_type,
+      });
+
+      await streamMediaMTProto(userId, Number(file.telegram_message_id), String(file.telegram_channel_id), res, start, end);
+    } else {
+      res.writeHead(200, {
+        'Content-Length': fileSize,
+        'Content-Type': file.mime_type,
+      });
+      await streamMediaMTProto(userId, Number(file.telegram_message_id), String(file.telegram_channel_id), res, 0, fileSize - 1);
+    }
+  } catch (error: any) {
+    console.error('Stream error:', error);
+    if (!res.headersSent) {
+      return res.status(500).json({ error: error.message || 'Failed to stream file' });
+    }
+    res.end();
   }
 }
 

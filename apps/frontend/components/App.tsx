@@ -19,6 +19,7 @@ import FavoritesView from "./FavoritesView";
 import TrashView from "./TrashView";
 import SettingsPanel from "./SettingsPanel";
 import FilePreviewModal from "./FilePreviewModal";
+import GlobalUploadTracker from "./GlobalUploadTracker";
 
 // ─── Normalise backend snake_case → camelCase ────────────────────────────────
 
@@ -329,7 +330,14 @@ export default function App() {
             }
           }, 280);
         } else if (token) {
-          api.uploadFile(token, file, currentFolderId, masterKey !== null)
+          api.uploadFile(
+            token, 
+            file, 
+            currentFolderId, 
+            masterKey !== null, 
+            undefined, 
+            (progress) => updateUploadProgress(uploadId, progress)
+          )
             .then((raw) => {
               setUploadStatus(uploadId, "completed");
               updateUploadProgress(uploadId, 100);
@@ -636,6 +644,8 @@ export default function App() {
         onClose={() => setPreviewFile(null)}
         onDownload={handleDownloadFile}
       />
+
+      <GlobalUploadTracker />
     </div>
   );
 }
