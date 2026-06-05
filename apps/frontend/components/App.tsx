@@ -321,7 +321,7 @@ export default function App() {
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
               };
-              setFiles([newFile, ...files]);
+              setFiles([newFile, ...useAppStore.getState().files]);
               confetti({ particleCount: 40, spread: 50, colors: ["#6366f1", "#d946ef", "#10b981"] });
             }
           }, 280);
@@ -330,7 +330,7 @@ export default function App() {
             .then((raw) => {
               setUploadStatus(uploadId, "completed");
               updateUploadProgress(uploadId, 100);
-              setFiles([normaliseFile(raw), ...files]);
+              setFiles([normaliseFile(raw), ...useAppStore.getState().files]);
               confetti({ particleCount: 40, spread: 50 });
             })
             .catch(() => setUploadStatus(uploadId, "failed"));
@@ -338,32 +338,32 @@ export default function App() {
       }
       e.target.value = "";
     },
-    [token, isDemo, files, currentFolderId, masterKey, user]
+    [token, isDemo, currentFolderId, masterKey, user] // removed files from deps
   );
 
   const handleDeleteFile = useCallback(
     (id: string) => {
-      setFiles(files.map((f) => f.id === id ? { ...f, isInTrash: true, trashedAt: new Date().toISOString() } : f));
+      setFiles(useAppStore.getState().files.map((f) => f.id === id ? { ...f, isInTrash: true, trashedAt: new Date().toISOString() } : f));
       if (!isDemo && token) api.deleteFile(token, id).catch(() => {});
     },
-    [token, isDemo, files]
+    [token, isDemo]
   );
 
   const handleRestoreFile = useCallback(
     (id: string) => {
-      setFiles(files.map((f) => f.id === id ? { ...f, isInTrash: false, trashedAt: null } : f));
+      setFiles(useAppStore.getState().files.map((f) => f.id === id ? { ...f, isInTrash: false, trashedAt: null } : f));
       confetti({ particleCount: 30, spread: 40 });
       if (!isDemo && token) api.restoreFile(token, id).catch(() => {});
     },
-    [token, isDemo, files]
+    [token, isDemo]
   );
 
   const handleToggleFavorite = useCallback(
     (id: string, current: boolean) => {
-      setFiles(files.map((f) => f.id === id ? { ...f, isFavorite: !current } : f));
+      setFiles(useAppStore.getState().files.map((f) => f.id === id ? { ...f, isFavorite: !current } : f));
       if (!isDemo && token) api.toggleFileFavorite(token, id, !current).catch(() => {});
     },
-    [token, isDemo, files]
+    [token, isDemo]
   );
 
   const handleDownloadFile = useCallback(
@@ -381,6 +381,36 @@ export default function App() {
           a.download = name;
           a.click();
           URL.revokeObjectURL(a.href);
+        });
+    },
+    [token, isDemo]
+  );
+
+  const handlePreviewFile = useCallback(
+    (id: string, mime: string) => {
+      if (isDemo) {
+        alert("Previews are not available in demo mode.");
+        return;
+      }
+      if (!token) return;
+      
+      const newWin = window.open("about:blank", "_blank");
+      if (!newWin) {
+        alert("Please allow popups to preview files.");
+        return;
+      }
+      newWin.document.write("<div style='display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;color:#888;'>Loading preview...</div>");
+      
+      fetch(api.getFileDownloadUrl(id), { headers: { Authorization: `Bearer ${token}` } })
+        .then((res) => res.blob())
+        .then((blob) => {
+          // Adjust blob type if necessary
+          const displayBlob = new Blob([blob], { type: mime });
+          const url = URL.createObjectURL(displayBlob);
+          newWin.location.href = url;
+        })
+        .catch(() => {
+          newWin.document.write("Failed to load preview.");
         });
     },
     [token, isDemo]
@@ -560,6 +590,7 @@ export default function App() {
                 onDeleteFile={handleDeleteFile}
                 onToggleFavorite={handleToggleFavorite}
                 onDownloadFile={handleDownloadFile}
+                onPreviewFile={handlePreviewFile}
                 onCreateFolder={handleCreateFolder}
               />
             )}

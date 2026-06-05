@@ -22,6 +22,7 @@ import {
   RefreshCw,
   Check,
   X,
+  Eye,
 } from "lucide-react";
 import { FileMetadata, Folder as FolderType } from "@drift-deck/types";
 import { formatBytes } from "@drift-deck/utils";
@@ -35,6 +36,7 @@ interface FilesExplorerProps {
   onDeleteFile: (id: string) => void;
   onToggleFavorite: (id: string, current: boolean) => void;
   onDownloadFile: (id: string, name: string) => void;
+  onPreviewFile: (id: string, mimeType: string) => void;
   onCreateFolder: (name: string, color: string) => void;
 }
 
@@ -60,6 +62,7 @@ export default function FilesExplorer({
   onDeleteFile,
   onToggleFavorite,
   onDownloadFile,
+  onPreviewFile,
   onCreateFolder,
 }: FilesExplorerProps) {
   const [search, setSearch] = useState("");
@@ -243,6 +246,12 @@ export default function FilesExplorer({
                     className="absolute right-0 top-7 z-30 glass-panel border-border rounded-xl py-1.5 w-36 shadow-xl"
                     onClick={(e) => e.stopPropagation()}
                   >
+                    <button
+                      onClick={() => { onPreviewFile(file.id, file.mimeType); setActiveMenuId(null); }}
+                      className="w-full px-3 py-2 text-xs font-semibold text-left hover:bg-cyan-500/10 flex items-center gap-2 text-foreground transition-colors"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-cyan-400" /> Preview
+                    </button>
                     <button
                       onClick={() => { onDownloadFile(file.id, file.name); setActiveMenuId(null); }}
                       className="w-full px-3 py-2 text-xs font-semibold text-left hover:bg-primary/10 flex items-center gap-2 text-foreground transition-colors"
