@@ -192,20 +192,6 @@ export async function downloadFile(req: AuthRequest, res: Response) {
       res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
       return res.send(buffer);
     } else {
-      // Bot API redirection or fetch
-      const bot = await getTelegramBotFileUrl(userId, file.name); // Mock or real Bot API URL
-      // Since bot needs fileId which we stored as telegram_message_id/fileId,
-      // let's grab Bot API file URL if we stored bot file_id in DB.
-      // Wait, let's fetch file location from Bot API.
-      // In uploadToTelegramBot, we returned `{ fileId: message.document.file_id, ... }`.
-      // Where did we save `fileId`? Ah! We need to make sure `telegram_message_id` has messageId,
-      // and we stored `fileId` in metadata? Wait, in `schema.sql`, we didn't have a specific `telegram_file_id` field!
-      // But we can store it in database file's properties or serialize it!
-      // Wait! Let's check `schema.sql`:
-      // `telegram_message_id` BIGINT NOT NULL
-      // Oh, let's store the Bot file_id inside `telegram_message_id` or let's update schema/fields?
-      // No! We can retrieve the file directly from the Telegram channel *using MTProto* since MTProto works for ALL files!
-      // This is a bulletproof backup: we can ALWAYS use downloadFileMTProto using `telegram_message_id` and `telegram_channel_id`!
       // MTProto download is extremely fast and has absolutely no size restrictions! Let's just download via MTProto!
       const buffer = await downloadFileMTProto(userId, Number(file.telegram_message_id), String(file.telegram_channel_id));
       res.setHeader('Content-Type', file.mime_type);
