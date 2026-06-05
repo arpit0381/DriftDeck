@@ -18,6 +18,7 @@ import AIAssistant from "./AIAssistant";
 import FavoritesView from "./FavoritesView";
 import TrashView from "./TrashView";
 import SettingsPanel from "./SettingsPanel";
+import FilePreviewModal from "./FilePreviewModal";
 
 // ─── Normalise backend snake_case → camelCase ────────────────────────────────
 
@@ -181,6 +182,8 @@ export default function App() {
   ]);
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+
+  const [previewFile, setPreviewFile] = useState<FileMetadata | null>(null);
 
   // ─── Hydrate from localStorage ───────────────────────────────────────────
 
@@ -388,32 +391,12 @@ export default function App() {
 
   const handlePreviewFile = useCallback(
     (id: string, mime: string) => {
-      if (isDemo) {
-        alert("Previews are not available in demo mode.");
-        return;
+      const file = files.find(f => f.id === id);
+      if (file) {
+        setPreviewFile(file);
       }
-      if (!token) return;
-      
-      const newWin = window.open("about:blank", "_blank");
-      if (!newWin) {
-        alert("Please allow popups to preview files.");
-        return;
-      }
-      newWin.document.write("<div style='display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;color:#888;'>Loading preview...</div>");
-      
-      fetch(api.getFileDownloadUrl(id), { headers: { Authorization: `Bearer ${token}` } })
-        .then((res) => res.blob())
-        .then((blob) => {
-          // Adjust blob type if necessary
-          const displayBlob = new Blob([blob], { type: mime });
-          const url = URL.createObjectURL(displayBlob);
-          newWin.location.href = url;
-        })
-        .catch(() => {
-          newWin.document.write("Failed to load preview.");
-        });
     },
-    [token, isDemo]
+    [files]
   );
 
   // ─── Folder operations ───────────────────────────────────────────────────
@@ -646,6 +629,13 @@ export default function App() {
           </AnimatePresence>
         </main>
       </div>
+
+      <FilePreviewModal
+        file={previewFile}
+        token={token}
+        onClose={() => setPreviewFile(null)}
+        onDownload={handleDownloadFile}
+      />
     </div>
   );
 }
