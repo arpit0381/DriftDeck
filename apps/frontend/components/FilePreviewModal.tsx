@@ -29,8 +29,12 @@ export default function FilePreviewModal({ file, token, onClose, onDownload }: F
     setError(null);
     setLoading(true);
 
-    const isVideoOrAudio = file.mimeType.startsWith('video/') || file.mimeType.startsWith('audio/');
-    if (isVideoOrAudio) {
+    const isStreamable = file.mimeType.startsWith('video/') ||
+                         file.mimeType.startsWith('audio/') ||
+                         file.mimeType.startsWith('image/') ||
+                         file.mimeType === 'application/pdf';
+
+    if (isStreamable) {
       setStreamUrl(api.getFileStreamUrl(file.id, token));
       setLoading(false);
       return;
@@ -38,29 +42,24 @@ export default function FilePreviewModal({ file, token, onClose, onDownload }: F
 
     const isText = file.mimeType.startsWith('text/') || file.mimeType === 'application/json';
 
-    fetch(api.getFileDownloadUrl(file.id), { headers: { Authorization: `Bearer ${token}` } })
-      .then(async (res) => {
-        if (!res.ok) throw new Error("Failed to load file preview");
-        const blob = await res.blob();
-        
-        // Ensure proper mime type is set for the blob
-        const typedBlob = new Blob([blob], { type: file.mimeType });
-        
-        if (isText) {
-          const text = await typedBlob.text();
+    if (isText) {
+      fetch(api.getFileDownloadUrl(file.id), { headers: { Authorization: `Bearer ${token}` } })
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Failed to load file preview");
+          const blob = await res.blob();
+          const text = await blob.text();
           setTextContent(text);
-        } else {
-          const url = URL.createObjectURL(typedBlob);
-          setBlobUrl(url);
-        }
-      })
-      .catch((err) => {
-        console.error("Preview error:", err);
-        setError("Could not load preview. The file might be encrypted or corrupted.");
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+        })
+        .catch((err) => {
+          console.error("Preview error:", err);
+          setError("Could not load preview. The file might be encrypted or corrupted.");
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    } else {
+      setLoading(false);
+    }
 
     return () => {
       // Cleanup blob url on unmount or file change
@@ -95,7 +94,7 @@ export default function FilePreviewModal({ file, token, onClose, onDownload }: F
           animate={{ scale: 1, y: 0 }}
           exit={{ scale: 0.95, y: 20 }}
           className="relative w-full max-w-5xl max-h-[90vh] glass-panel border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-border/30 bg-card/50">
@@ -159,8 +158,8 @@ export default function FilePreviewModal({ file, token, onClose, onDownload }: F
                   </div>
                 )}
 
-                {canPreview && blobUrl && isImage && (
-                  <img src={blobUrl} alt={file.name} className="max-w-full max-h-[70vh] rounded-lg shadow-lg object-contain" />
+                {canPreview && streamUrl && isImage && (
+                  <img src={streamUrl} alt={file.name} className="max-w-full max-h-[70vh] rounded-lg shadow-lg object-contain" />
                 )}
 
                 {canPreview && streamUrl && isVideo && (
@@ -171,8 +170,8 @@ export default function FilePreviewModal({ file, token, onClose, onDownload }: F
                   <audio src={streamUrl} controls autoPlay className="w-full max-w-md shadow-lg" />
                 )}
 
-                {canPreview && blobUrl && isPdf && (
-                  <iframe src={blobUrl} className="w-full h-[75vh] rounded-lg bg-white" title={file.name} />
+                {canPreview && streamUrl && isPdf && (
+                  <iframe src={streamUrl} className="w-full h-[75vh] rounded-lg bg-white" title={file.name} />
                 )}
 
                 {canPreview && isText && textContent !== null && (

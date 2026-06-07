@@ -54,11 +54,42 @@ export default function DashboardHome({
               <Check className="w-3.5 h-3.5" /> 100% Free Telegram Node
             </span>
           </div>
-          <div className="w-20 h-20 rounded-full border-4 border-border flex items-center justify-center relative shadow-inner">
-            <div className="absolute inset-1 rounded-full border-4 border-primary border-t-transparent animate-spin" style={{ animationDuration: "3s" }} />
-            <span className="text-xs font-black font-mono text-foreground">
-              {totalFiles}
-            </span>
+          
+          {/* SVG Progress Circle (Google/Apple manager style) */}
+          <div className="relative w-20 h-20 flex items-center justify-center">
+            <svg className="w-full h-full transform -rotate-90">
+              {/* Background ring */}
+              <circle
+                cx="40"
+                cy="40"
+                r="32"
+                stroke="rgba(255, 255, 255, 0.05)"
+                strokeWidth="5"
+                fill="transparent"
+              />
+              {/* Foreground progress */}
+              <circle
+                cx="40"
+                cy="40"
+                r="32"
+                stroke="var(--primary)"
+                strokeWidth="5"
+                fill="transparent"
+                strokeDasharray={2 * Math.PI * 32}
+                strokeDashoffset={2 * Math.PI * 32 * (1 - Math.min(100, Math.max(1, Math.round((totalSize / (2 * 1024 * 1024 * 1024)) * 100))) / 100)}
+                strokeLinecap="round"
+                className="transition-all duration-1000 ease-out"
+                style={{ filter: "drop-shadow(0 0 3px var(--primary-glow))" }}
+              />
+            </svg>
+            <div className="absolute flex flex-col items-center justify-center">
+              <span className="text-xs font-black font-mono text-foreground leading-none">
+                {Math.min(100, Math.round((totalSize / (2 * 1024 * 1024 * 1024)) * 100))}%
+              </span>
+              <span className="text-[7px] font-bold text-muted uppercase mt-0.5 tracking-tighter">
+                Used
+              </span>
+            </div>
           </div>
         </div>
 

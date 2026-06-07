@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import confetti from "canvas-confetti";
+import { Star, Download, Trash2 } from "lucide-react";
 
 import { useAppStore } from "../lib/store";
 import * as api from "../lib/api";
@@ -20,6 +21,7 @@ import TrashView from "./TrashView";
 import SettingsPanel from "./SettingsPanel";
 import FilePreviewModal from "./FilePreviewModal";
 import GlobalUploadTracker from "./GlobalUploadTracker";
+import InspectorPanel from "./InspectorPanel";
 
 // ─── Normalise backend snake_case → camelCase ────────────────────────────────
 
@@ -170,6 +172,11 @@ export default function App() {
     folders, setFolders,
     uploadQueue, addToUploadQueue, updateUploadProgress, setUploadStatus,
     masterKey, setMasterKey,
+    navigateToFolderWithHistory,
+    navigateHistoryBack,
+    navigateHistoryForward,
+    selectedItemIds,
+    clearSelection,
   } = useAppStore();
 
   const [loading, setLoading] = useState(false);
@@ -186,6 +193,7 @@ export default function App() {
 
   const [previewFile, setPreviewFile] = useState<FileMetadata | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [activities, setActivities] = useState<any[]>([]);
 
   // ─── Hydrate from localStorage ───────────────────────────────────────────
 
@@ -211,6 +219,11 @@ export default function App() {
       if (files.length === 0) setFiles(demo.files);
       if (folders.length === 0) setFolders(demo.folders);
       if (notes.length === 0) setNotes(demo.notes);
+      setActivities([
+        { id: "a1", type: "UPLOAD", fileId: "f1", createdAt: new Date(Date.now() - 3600000).toISOString() },
+        { id: "a2", type: "SHARE", fileId: "f3", createdAt: new Date(Date.now() - 7200000).toISOString() },
+        { id: "a3", type: "EDIT_NOTE", noteId: "n1", createdAt: new Date(Date.now() - 86400000).toISOString() },
+      ]);
       return;
     }
 
@@ -219,11 +232,13 @@ export default function App() {
       api.listFolders(token).catch(() => [] as any[]),
       api.listNotes(token).catch(() => [] as any[]),
       api.getFileStats(token).catch(() => null),
-    ]).then(([rawFiles, rawFolders, rawNotes, rawStats]) => {
+      api.listActivities(token).catch(() => [] as any[]),
+    ]).then(([rawFiles, rawFolders, rawNotes, rawStats, rawActivities]) => {
       setFiles((rawFiles as any[]).map(normaliseFile));
       setFolders((rawFolders as any[]).map(normaliseFolder));
       setNotes((rawNotes as any[]).map(normaliseNote));
       setStats(rawStats);
+      setActivities(rawActivities);
     });
   }, [token]);
 
@@ -424,14 +439,69 @@ export default function App() {
           updatedAt: new Date().toISOString(),
         };
         setFolders([...folders, newFolder]);
+        // Log activity
+        setActivities(prev => [
+          { id: `act_${Math.random()}`, type: "UPLOAD", createdAt: new Date().toISOString() },
+          ...prev
+        ]);
         return;
       }
       if (!token) return;
       api.createFolder(token, name, currentFolderId, color)
-        .then((raw) => setFolders([...folders, normaliseFolder(raw)]))
+        .then((raw) => {
+          setFolders([...folders, normaliseFolder(raw)]);
+          api.listActivities(token).then(setActivities).catch(() => {});
+        })
         .catch(() => {});
     },
     [token, isDemo, folders, currentFolderId, user]
+  );
+
+  const handleRenameFolder = useCallback(
+    async (id: string, name: string, color?: string) => {
+      setFolders(useAppStore.getState().folders.map((f) => f.id === id ? { ...f, name, color: color ?? f.color } : f));
+      if (!isDemo && token) {
+        await api.renameFolder(token, id, name, color).catch(() => {});
+        api.listActivities(token).then(setActivities).catch(() => {});
+      }
+    },
+    [token, isDemo, setFolders]
+  );
+
+  const handleDeleteFolder = useCallback(
+    async (id: string) => {
+      setFolders(useAppStore.getState().folders.filter((f) => f.id !== id));
+      // Delete child files
+      const childFiles = useAppStore.getState().files.filter((f) => f.folderId === id);
+      childFiles.forEach((file) => handleDeleteFile(file.id));
+      if (!isDemo && token) {
+        await api.deleteFolder(token, id).catch(() => {});
+        api.listActivities(token).then(setActivities).catch(() => {});
+      }
+    },
+    [token, isDemo, setFolders, handleDeleteFile]
+  );
+
+  const handleRenameFile = useCallback(
+    async (id: string, name: string) => {
+      setFiles(useAppStore.getState().files.map((f) => f.id === id ? { ...f, name } : f));
+      if (!isDemo && token) {
+        await api.renameFile(token, id, name).catch(() => {});
+        api.listActivities(token).then(setActivities).catch(() => {});
+      }
+    },
+    [token, isDemo, setFiles]
+  );
+
+  const handleMoveFile = useCallback(
+    async (id: string, targetFolderId: string | null) => {
+      setFiles(useAppStore.getState().files.map((f) => f.id === id ? { ...f, folderId: targetFolderId } : f));
+      if (!isDemo && token) {
+        await api.moveFile(token, id, targetFolderId).catch(() => {});
+        api.listActivities(token).then(setActivities).catch(() => {});
+      }
+    },
+    [token, isDemo, setFiles]
   );
 
   // ─── Notes operations ────────────────────────────────────────────────────
@@ -543,10 +613,7 @@ export default function App() {
         username={user?.username}
         activeTab={activeTab}
         folderPath={folderPath}
-        setCurrentFolderId={(id) => {
-          setCurrentFolderId(id);
-          if (id === null) setFolderPath([]);
-        }}
+        onBreadcrumbClick={navigateToFolderWithHistory}
         onLogout={logout}
         onToggleMobileMenu={() => setIsMobileMenuOpen(true)}
       />
@@ -593,6 +660,10 @@ export default function App() {
                 onDownloadFile={handleDownloadFile}
                 onPreviewFile={handlePreviewFile}
                 onCreateFolder={handleCreateFolder}
+                onRenameFolder={handleRenameFolder}
+                onDeleteFolder={handleDeleteFolder}
+                onRenameFile={handleRenameFile}
+                onMoveFile={handleMoveFile}
               />
             )}
 
@@ -646,7 +717,97 @@ export default function App() {
             )}
           </AnimatePresence>
         </main>
+
+        {["files", "favorites", "trash", "dashboard"].includes(activeTab) && (
+          <InspectorPanel
+            activities={activities}
+            onDownloadFile={handleDownloadFile}
+            onPreviewFile={handlePreviewFile}
+            onToggleFavorite={handleToggleFavorite}
+            onDeleteFile={handleDeleteFile}
+            onRenameFile={(id) => {
+              window.dispatchEvent(new CustomEvent("trigger-rename-file", { detail: { id } }));
+            }}
+            onMoveFile={(id) => {
+              window.dispatchEvent(new CustomEvent("trigger-move-file", { detail: { id } }));
+            }}
+            onRenameFolder={(folder) => {
+              window.dispatchEvent(new CustomEvent("trigger-rename-folder", { detail: { folder } }));
+            }}
+            onDeleteFolder={(id) => {
+              handleDeleteFolder(id);
+              useAppStore.getState().clearSelection();
+            }}
+          />
+        )}
       </div>
+
+      {/* Sticky Bottom Actions Bar (Google & Apple style, rendered at root viewport level to avoid parent transforms) */}
+      <AnimatePresence>
+        {selectedItemIds.length > 0 && (
+          <motion.div
+            initial={{ y: 80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 80, opacity: 0 }}
+            className="fixed bottom-6 left-0 right-0 mx-auto z-50 glass-panel px-4 sm:px-6 py-2.5 sm:py-3.5 rounded-full border-primary/30 flex items-center gap-3 sm:gap-5 shadow-2xl bg-card w-[92%] sm:w-max max-w-md justify-between"
+          >
+            <span className="text-xs font-bold text-foreground truncate max-w-[100px] sm:max-w-none">
+              {selectedItemIds.length} item{selectedItemIds.length > 1 ? "s" : ""} <span className="hidden sm:inline">selected</span>
+            </span>
+            <div className="h-4 w-[1px] bg-border/40" />
+            
+            <div className="flex items-center gap-3">
+              {/* Batch Stars */}
+              <button
+                onClick={() => {
+                  const itemsToStar = files.filter(f => selectedItemIds.includes(f.id));
+                  itemsToStar.forEach(f => handleToggleFavorite(f.id, f.isFavorite));
+                  clearSelection();
+                }}
+                className="p-1.5 rounded-lg hover:bg-primary/10 text-muted hover:text-yellow-400 transition-all"
+                title="Toggle Starred"
+              >
+                <Star className="w-4 h-4" />
+              </button>
+
+              {/* Batch Downloads */}
+              <button
+                onClick={() => {
+                  const filesToDownload = files.filter(f => selectedItemIds.includes(f.id));
+                  filesToDownload.forEach(f => handleDownloadFile(f.id, f.name));
+                  clearSelection();
+                }}
+                className="p-1.5 rounded-lg hover:bg-primary/10 text-muted hover:text-primary transition-all"
+                title="Download All"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+
+              {/* Batch Delete */}
+              <button
+                onClick={() => {
+                  const filesToDelete = files.filter(f => selectedItemIds.includes(f.id));
+                  filesToDelete.forEach(f => handleDeleteFile(f.id));
+                  const foldersToDelete = folders.filter(f => selectedItemIds.includes(f.id));
+                  foldersToDelete.forEach(f => handleDeleteFolder(f.id));
+                  clearSelection();
+                }}
+                className="p-1.5 rounded-lg hover:bg-red-500/10 text-muted hover:text-red-400 transition-all"
+                title="Delete Selected"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={clearSelection}
+                className="text-xs font-bold bg-border/20 text-muted hover:text-foreground px-3 py-1 rounded-xl transition-all"
+              >
+                Clear
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <FilePreviewModal
         file={previewFile}

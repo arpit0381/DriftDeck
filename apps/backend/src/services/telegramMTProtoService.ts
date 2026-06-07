@@ -3,12 +3,44 @@ import { StringSession } from 'telegram/sessions/index.js';
 import { CustomFile } from 'telegram/client/uploads.js';
 import { supabase } from '../config/supabase.js';
 import bigInt from 'big-integer';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
 
 const apiId = Number(process.env.TELEGRAM_API_ID) || 0;
 const apiHash = process.env.TELEGRAM_API_HASH || '';
 
-// Cached authenticated clients keyed by bot token
-const clientCache: Record<string, TelegramClient> = {};
+// Cached promises of connected clients keyed by bot token to prevent race conditions during concurrent requests
+const connectionPromises: Record<string, Promise<{ client: TelegramClient; channelId: string }> | undefined> = {};
+
+// Cached rate-limit expirations keyed by bot token
+const rateLimitExpirations: Record<string, number> = {};
+
+function getSessionFilePath(botToken: string): string {
+  const tokenHash = crypto.createHash('sha256').update(botToken).digest('hex');
+  return path.join(process.cwd(), `.session_${tokenHash}.dat`);
+}
+
+function loadSession(botToken: string): string {
+  const filePath = getSessionFilePath(botToken);
+  if (fs.existsSync(filePath)) {
+    try {
+      return fs.readFileSync(filePath, 'utf-8').trim();
+    } catch (err) {
+      console.error('[MTProto] Failed to read session file:', err);
+    }
+  }
+  return '';
+}
+
+function saveSession(botToken: string, sessionString: string) {
+  const filePath = getSessionFilePath(botToken);
+  try {
+    fs.writeFileSync(filePath, sessionString, 'utf-8');
+  } catch (err) {
+    console.error('[MTProto] Failed to save session file:', err);
+  }
+}
 
 async function resolveBotCredentials(userId?: string): Promise<{ botToken: string; channelId: string }> {
   let botToken = process.env.TELEGRAM_BOT_TOKEN || '';
@@ -41,22 +73,62 @@ export async function getMTProtoClient(userId?: string): Promise<{ client: Teleg
     throw new Error('TELEGRAM_API_ID and TELEGRAM_API_HASH must be set in environment variables.');
   }
 
-  // Return cached connected client
-  const cached = clientCache[botToken];
-  if (cached?.connected) {
-    return { client: cached, channelId };
+  // Check rate limit cache
+  const expiration = rateLimitExpirations[botToken];
+  if (expiration && Date.now() < expiration) {
+    const remainingSeconds = Math.ceil((expiration - Date.now()) / 1000);
+    throw new Error(`Telegram MTProto is currently rate-limited (FloodWait). Please wait ${remainingSeconds} more seconds before retrying, or connect your own Telegram bot token in settings.`);
   }
 
-  const stringSession = new StringSession('');
-  const client = new TelegramClient(stringSession, apiId, apiHash, {
-    connectionRetries: 5,
+  // Check if we have an active connection or connection-in-progress promise
+  if (connectionPromises[botToken]) {
+    try {
+      const result = await connectionPromises[botToken];
+      if (result.client.connected) {
+        return result;
+      }
+      // If it exists but got disconnected, delete it and create a new one
+      delete connectionPromises[botToken];
+    } catch (err) {
+      delete connectionPromises[botToken];
+    }
+  }
+
+  // Create a connection promise and store it in cache immediately to avoid race conditions
+  const connectPromise = (async () => {
+    const sessionString = loadSession(botToken);
+    const stringSession = new StringSession(sessionString);
+    const client = new TelegramClient(stringSession, apiId, apiHash, {
+      connectionRetries: 5,
+    });
+
+    await client.start({ botAuthToken: botToken });
+
+    // Save session string on successful authorization so we bypass key exchange on next startup
+    const newSessionString = client.session.save() as any;
+    if (newSessionString && newSessionString !== sessionString) {
+      saveSession(botToken, newSessionString);
+    }
+
+    return { client, channelId };
+  })();
+
+  connectionPromises[botToken] = connectPromise;
+
+  // If connection fails, remove it from cache so the next request can retry, and check for FLOOD wait limits
+  connectPromise.catch((err: any) => {
+    delete connectionPromises[botToken];
+
+    if (err && (err.errorMessage === 'FLOOD' || err.message?.includes('FLOOD') || err.seconds)) {
+      const waitSeconds = err.seconds || 1200;
+      console.warn(`[MTProto] Telegram auth FLOOD wait detected. Caching block for ${waitSeconds} seconds.`);
+      rateLimitExpirations[botToken] = Date.now() + (waitSeconds * 1000);
+    }
   });
 
-  await client.start({ botAuthToken: botToken });
-
-  clientCache[botToken] = client;
-  return { client, channelId };
+  return connectPromise;
 }
+
 
 export async function uploadLargeFileMTProto(
   userId: string,
@@ -80,6 +152,7 @@ export async function uploadLargeFileMTProto(
   const result = (await client.sendFile(entity, {
     file: uploadedFile,
     caption: `☁️ Drift Deck: ${fileName}`,
+    forceDocument: true,
     attributes: [new Api.DocumentAttributeFilename({ fileName })],
   })) as Api.Message;
 

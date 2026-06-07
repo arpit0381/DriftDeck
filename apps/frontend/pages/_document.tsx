@@ -1,4 +1,7 @@
-import { Html, Head, Main, NextScript } from 'next/document';
+import { Html, Head as NextHead, Main, NextScript as NextScriptOriginal } from 'next/document';
+
+const Head = NextHead as any;
+const NextScript = NextScriptOriginal as any;
 
 export default function Document() {
   return (
@@ -16,3 +19,4 @@ export default function Document() {
     </Html>
   );
 }
+

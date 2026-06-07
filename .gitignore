@@ -34,3 +34,6 @@ pnpm-debug.log*
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+# Telegram Sessions
+.session_*.dat

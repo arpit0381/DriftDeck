@@ -45,6 +45,27 @@ interface AppState {
   pushFolderPath: (folder: Folder) => void;
   popFolderPath: () => void;
 
+  // Navigation History (Google/Apple manager style)
+  historyStack: { folderId: string | null; folderPath: Folder[] }[];
+  historyIndex: number;
+  navigateToFolderWithHistory: (folderId: string | null, path: Folder[]) => void;
+  navigateHistoryBack: () => void;
+  navigateHistoryForward: () => void;
+
+  // Sidebar & View Mode Layouts
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+  viewMode: 'grid' | 'list';
+  setViewMode: (mode: 'grid' | 'list') => void;
+  detailsPanelOpen: boolean;
+  setDetailsPanelOpen: (open: boolean) => void;
+
+  // Multi-selection
+  selectedItemIds: string[];
+  setSelectedItemIds: (ids: string[]) => void;
+  toggleSelectedItem: (id: string) => void;
+  clearSelection: () => void;
+
   // Data Cache states
   files: FileMetadata[];
   setFiles: (files: FileMetadata[]) => void;
@@ -91,24 +112,124 @@ export const useAppStore = create<AppState>((set) => ({
     })),
   logout: () => {
     localStorage.removeItem('drift-deck-token');
-    set({ token: null, user: null, settings: null, masterKey: null, activeTab: 'dashboard' });
+    set({
+      token: null,
+      user: null,
+      settings: null,
+      masterKey: null,
+      activeTab: 'dashboard',
+      selectedItemIds: [],
+      historyStack: [{ folderId: null, folderPath: [] }],
+      historyIndex: 0,
+    });
   },
 
   // Navigation
   activeTab: 'dashboard',
   setActiveTab: (tab) => set({ activeTab: tab }),
   currentFolderId: null,
-  setCurrentFolderId: (id) => set({ currentFolderId: id }),
+  setCurrentFolderId: (id) =>
+    set((state) => {
+      // If we directly change folder (e.g. from header), clear selection
+      return { currentFolderId: id, selectedItemIds: [] };
+    }),
   folderPath: [],
   setFolderPath: (folderPath) => set({ folderPath }),
   pushFolderPath: (folder) =>
-    set((state) => ({ folderPath: [...state.folderPath, folder], currentFolderId: folder.id })),
+    set((state) => {
+      const nextPath = [...state.folderPath, folder];
+      const nextFolderId = folder.id;
+      // Add to navigation history
+      const newStack = state.historyStack.slice(0, state.historyIndex + 1);
+      newStack.push({ folderId: nextFolderId, folderPath: nextPath });
+      return {
+        folderPath: nextPath,
+        currentFolderId: nextFolderId,
+        historyStack: newStack,
+        historyIndex: newStack.length - 1,
+        selectedItemIds: [], // reset selection
+      };
+    }),
   popFolderPath: () =>
     set((state) => {
       const nextPath = state.folderPath.slice(0, -1);
       const nextFolderId = nextPath.length > 0 ? nextPath[nextPath.length - 1].id : null;
-      return { folderPath: nextPath, currentFolderId: nextFolderId };
+      // Add to navigation history
+      const newStack = state.historyStack.slice(0, state.historyIndex + 1);
+      newStack.push({ folderId: nextFolderId, folderPath: nextPath });
+      return {
+        folderPath: nextPath,
+        currentFolderId: nextFolderId,
+        historyStack: newStack,
+        historyIndex: newStack.length - 1,
+        selectedItemIds: [], // reset selection
+      };
     }),
+
+  // Navigation History
+  historyStack: [{ folderId: null, folderPath: [] }],
+  historyIndex: 0,
+  navigateToFolderWithHistory: (folderId, path) =>
+    set((state) => {
+      const newStack = state.historyStack.slice(0, state.historyIndex + 1);
+      newStack.push({ folderId, folderPath: path });
+      return {
+        currentFolderId: folderId,
+        folderPath: path,
+        historyStack: newStack,
+        historyIndex: newStack.length - 1,
+        selectedItemIds: [],
+      };
+    }),
+  navigateHistoryBack: () =>
+    set((state) => {
+      if (state.historyIndex > 0) {
+        const nextIndex = state.historyIndex - 1;
+        const target = state.historyStack[nextIndex];
+        return {
+          historyIndex: nextIndex,
+          currentFolderId: target.folderId,
+          folderPath: target.folderPath,
+          selectedItemIds: [],
+        };
+      }
+      return {};
+    }),
+  navigateHistoryForward: () =>
+    set((state) => {
+      if (state.historyIndex < state.historyStack.length - 1) {
+        const nextIndex = state.historyIndex + 1;
+        const target = state.historyStack[nextIndex];
+        return {
+          historyIndex: nextIndex,
+          currentFolderId: target.folderId,
+          folderPath: target.folderPath,
+          selectedItemIds: [],
+        };
+      }
+      return {};
+    }),
+
+  // Sidebar & View Mode
+  sidebarCollapsed: false,
+  setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
+  viewMode: 'list',
+  setViewMode: (viewMode) => set({ viewMode }),
+  detailsPanelOpen: true, // open by default on desktop for premium feel
+  setDetailsPanelOpen: (detailsPanelOpen) => set({ detailsPanelOpen }),
+
+  // Multi-selection
+  selectedItemIds: [],
+  setSelectedItemIds: (selectedItemIds) => set({ selectedItemIds }),
+  toggleSelectedItem: (id) =>
+    set((state) => {
+      const exists = state.selectedItemIds.includes(id);
+      const nextIds = exists
+        ? state.selectedItemIds.filter((itemId) => itemId !== id)
+        : [...state.selectedItemIds, id];
+      return { selectedItemIds: nextIds };
+    }),
+  clearSelection: () => set({ selectedItemIds: [] }),
 
   // Data Cache
   files: [],

@@ -15,7 +15,7 @@ export default function GlobalUploadTracker() {
   const totalProgress = uploadQueue.reduce((acc, curr) => acc + curr.progress, 0) / uploadQueue.length || 0;
 
   return (
-    <div className="fixed bottom-6 right-6 w-80 bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col transition-all duration-300 ease-in-out">
+    <div className="fixed bottom-6 right-6 left-6 sm:left-auto w-auto sm:w-80 bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col transition-all duration-300 ease-in-out">
       {/* Header */}
       <div 
         className="flex items-center justify-between px-4 py-3 bg-slate-800/50 cursor-pointer hover:bg-slate-800 transition-colors"

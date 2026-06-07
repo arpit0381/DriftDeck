@@ -10,8 +10,7 @@ interface DashboardHeaderProps {
   username?: string;
   activeTab: ActiveTab;
   folderPath: Folder[];
-  setCurrentFolderId: (id: string | null) => void;
-  setCurrentFolderId: (id: string | null) => void;
+  onBreadcrumbClick: (id: string | null, path: Folder[]) => void;
   onLogout: () => void;
   onToggleMobileMenu?: () => void;
 }
@@ -30,7 +29,7 @@ export default function DashboardHeader({
   username,
   activeTab,
   folderPath,
-  setCurrentFolderId,
+  onBreadcrumbClick,
   onLogout,
   onToggleMobileMenu,
 }: DashboardHeaderProps) {
@@ -54,25 +53,27 @@ export default function DashboardHeader({
 
         {/* Breadcrumbs for file explorer */}
         {activeTab === "files" && (
-          <div className="hidden md:flex items-center gap-2 text-xs font-semibold text-muted">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted overflow-x-auto whitespace-nowrap scrollbar-none max-w-[150px] sm:max-w-xs md:max-w-none">
             <button
-              onClick={() => setCurrentFolderId(null)}
-              className="hover:text-primary transition-colors"
+              onClick={() => onBreadcrumbClick(null, [])}
+              className="hover:text-primary transition-colors hover:underline flex-shrink-0"
             >
               Root
             </button>
             {folderPath.map((item, idx) => (
-              <div key={item.id} className="flex items-center gap-2">
-                <ChevronRight className="w-3 h-3" />
-                <span
+              <div key={item.id} className="flex items-center gap-2 flex-shrink-0">
+                <ChevronRight className="w-3 h-3 text-muted/50" />
+                <button
+                  onClick={() => idx < folderPath.length - 1 && onBreadcrumbClick(item.id, folderPath.slice(0, idx + 1))}
                   className={
                     idx === folderPath.length - 1
-                      ? "text-foreground"
-                      : "hover:text-primary transition-colors cursor-pointer"
+                      ? "text-foreground font-bold cursor-default"
+                      : "hover:text-primary transition-colors hover:underline cursor-pointer"
                   }
+                  disabled={idx === folderPath.length - 1}
                 >
                   {item.name}
-                </span>
+                </button>
               </div>
             ))}
           </div>

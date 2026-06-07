@@ -33,7 +33,7 @@ const router = Router();
 
 import os from 'os';
 
-const storage = multer.diskStorage({ dest: os.tmpdir() });
+const storage = multer.diskStorage({ destination: os.tmpdir() });
 const upload = multer({
   storage,
   // No strict fileSize limit here to support arbitrarily large files
