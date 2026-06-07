@@ -34,6 +34,9 @@ const config: Config = {
         "float": "float 6s ease-in-out infinite",
         "matrix": "matrix 20s linear infinite",
         "spin-slow": "spin 3s linear infinite",
+        "fade-in-up": "fade-in-up 0.8s ease-out forwards",
+        "float-orb": "float-orb 12s ease-in-out infinite",
+        "float-orb-reverse": "float-orb-reverse 14s ease-in-out infinite",
       },
       keyframes: {
         "pulse-glow": {
@@ -47,6 +50,22 @@ const config: Config = {
         matrix: {
           "0%": { transform: "translateY(-100%)" },
           "100%": { transform: "translateY(100%)" },
+        },
+        "fade-in-up": {
+          from: { opacity: "0", transform: "translateY(30px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        "float-orb": {
+          "0%, 100%": { transform: "translate(0, 0) scale(1)" },
+          "25%": { transform: "translate(30px, -40px) scale(1.05)" },
+          "50%": { transform: "translate(-20px, 20px) scale(0.95)" },
+          "75%": { transform: "translate(15px, 35px) scale(1.02)" },
+        },
+        "float-orb-reverse": {
+          "0%, 100%": { transform: "translate(0, 0) scale(1)" },
+          "25%": { transform: "translate(-25px, 30px) scale(0.97)" },
+          "50%": { transform: "translate(35px, -15px) scale(1.04)" },
+          "75%": { transform: "translate(-10px, -30px) scale(0.98)" },
         },
       },
     },
